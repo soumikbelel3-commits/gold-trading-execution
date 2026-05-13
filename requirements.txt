@@ -1,0 +1,17 @@
+# ═══════════════════════════════════════════════════
+# Gold Pre-Session Analysis Dashboard
+# Dependencies
+# ═══════════════════════════════════════════════════
+
+# --- Core ---
+pandas>=2.0.0
+numpy>=1.24.0
+
+# --- Financial Data ---
+yfinance>=0.2.30
+
+# --- Data Storage ---
+pyarrow>=14.0.0
+
+# --- Utilities ---
+python-dotenv>=1.0.0

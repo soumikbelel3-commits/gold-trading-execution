@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gold Pre-Session Analysis | XAU/USD & MCX Gold</title>
+    <meta name="description" content="Institutional-grade gold trading pre-session analysis dashboard. Technical analysis, macro scoring, sentiment, volatility, and trade setups.">
+    <link rel="stylesheet" href="styles.css?v=linear">
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+
+        <!-- ═══ LOADING STATE ═══ -->
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading session data...</div>
+        </div>
+
+        <!-- ═══ DASHBOARD (hidden until data loads) ═══ -->
+        <div id="dashboard" style="display:none;">
+
+            <!-- HEADER -->
+            <header class="header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <div class="logo">Au</div>
+                        <div class="header-title">
+                            <h1>Gold Pre-Session Analysis</h1>
+                            <div class="subtitle">XAU/USD & MCX Gold · Institutional Desk</div>
+                        </div>
+                    </div>
+                    <div class="price-hero">
+                        <span class="price-value" id="hero-price">$---</span>
+                        <span class="price-change" id="hero-change">--</span>
+                    </div>
+                    <div class="header-right">
+                        <span class="session-badge" id="active-session">--</span>
+                        <span class="timestamp" id="timestamp">--</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- COMPOSITE SIGNAL BAR -->
+            <div class="signal-bar" id="signal-bar">
+                <div class="signal-main">
+                    <div class="signal-gauge" id="signal-gauge">
+                        <span id="signal-emoji"></span>
+                    </div>
+                    <div>
+                        <div class="signal-value" id="signal-value">--</div>
+                        <div class="signal-label">Composite Signal</div>
+                    </div>
+                    <div>
+                        <div class="signal-action" id="signal-action">--</div>
+                        <div class="signal-label">Action · <span id="signal-confidence">--</span> confidence</div>
+                    </div>
+                    <div>
+                        <div class="signal-value text-gold" id="signal-regime" style="font-size:1rem;">--</div>
+                        <div class="signal-label">Regime</div>
+                    </div>
+                </div>
+                <div class="signal-breakdown" id="signal-breakdown"></div>
+            </div>
+
+            <!-- ROW 1: Chart + Key Levels -->
+            <div class="grid grid-3-2">
+                <!-- PRICE CHART -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📈 Gold Price Chart</h2>
+                        <div class="chart-tabs" id="chart-tabs">
+                            <button class="chart-tab active" data-tf="daily">Daily</button>
+                            <button class="chart-tab" data-tf="1h">1H</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" id="price-chart"></div>
+                    </div>
+                </div>
+
+                <!-- KEY LEVELS + FIBONACCI -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🎯 Key Levels</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="key-levels"></div>
+                        <h3 style="font-size:0.7rem; color:var(--text-muted); margin:12px 0 6px; text-transform:uppercase; letter-spacing:0.05em;">Fibonacci Levels</h3>
+                        <div id="fib-levels"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 2: Multi-TF Technicals + Macro -->
+            <div class="grid grid-2">
+                <!-- MULTI-TIMEFRAME TECHNICALS -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📊 Technical Scorecard</h2>
+                        <span class="badge" id="tech-bias-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="technical-scorecard"></div>
+                    </div>
+                </div>
+
+                <!-- MACRO ENVIRONMENT -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🏛️ Macro Environment</h2>
+                        <span class="badge" id="macro-regime-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="macro-factors"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 3: Sentiment + Correlation + Volatility -->
+            <div class="grid grid-3">
+                <!-- SENTIMENT -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>💬 Sentiment</h2>
+                        <span class="badge" id="sentiment-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="sentiment-meter" id="sentiment-meter"></div>
+                        <div class="mt-2" id="news-headlines"></div>
+                    </div>
+                </div>
+
+                <!-- CROSS-ASSET CORRELATIONS -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🔗 Cross-Asset Correlations</h2>
+                        <span class="badge" id="corr-regime-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="heatmap-grid" id="corr-heatmap"></div>
+                        <div class="mt-2" id="corr-divergences"></div>
+                    </div>
+                </div>
+
+                <!-- VOLATILITY -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📈 Volatility Surface</h2>
+                        <span class="badge" id="vol-regime-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="vol-bars"></div>
+                        <div id="vol-expected-range" class="mt-1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 4: Ichimoku + Pivot Points -->
+            <div class="grid grid-2">
+                <!-- ICHIMOKU -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>☁️ Ichimoku Cloud</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="ichimoku-data"></div>
+                    </div>
+                </div>
+
+                <!-- PIVOT POINTS -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📐 Pivot Points</h2>
+                        <div class="chart-tabs" id="pivot-tabs">
+                            <button class="chart-tab active" data-pivot="classic">Classic</button>
+                            <button class="chart-tab" data-pivot="camarilla">Camarilla</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="pivot-points"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 5: Session Gameplan + MCX India -->
+            <div class="grid grid-2">
+                <!-- SESSION GAMEPLAN -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🕐 Session Gameplan</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="session-plans"></div>
+                    </div>
+                </div>
+
+                <!-- MCX GOLD (INDIA) -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🇮🇳 MCX Gold — India</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="mcx-data"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 6: Trade Setups + Risk Parameters -->
+            <div class="grid grid-2">
+                <!-- TRADE SETUPS -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🎯 Trade Setups</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="trade-setups"></div>
+                    </div>
+                </div>
+
+                <!-- RISK PARAMETERS -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🔒 Risk Parameters</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="risk-params"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FOOTER -->
+            <footer class="footer">
+                Gold Pre-Session Analysis Dashboard · Data from yfinance & Quant Research Pipeline · 
+                For educational & research purposes only · Not financial advice
+            </footer>
+        </div>
+    </div>
+
+    <script src="app.js?v=linear"></script>
+</body>
+</html>

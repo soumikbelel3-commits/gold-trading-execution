@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Session output (regenerated on each run)
+output/session_data.json
+dashboard/session_data.json
+
+# Gemini/Antigravity artifacts
+implementation_plan.md
+walkthrough.md
