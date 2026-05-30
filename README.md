@@ -4,7 +4,7 @@ An institutional-grade **Gold Pre-Session Analysis Dashboard** that delivers a o
 
 ## Features
 
-- **Composite Alpha Signal** — Aggregated BUY/SELL/NEUTRAL recommendation with confidence scoring
+- **Composite Alpha Signal** — Aggregated BUY/SELL/NEUTRAL recommendation with confidence scoring, now blending ML & seasonality
 - **Multi-Timeframe Technical Analysis** — 50+ indicators across 1H, 4H, Daily timeframes (RSI, MACD, Bollinger, Ichimoku, Fibonacci, Pivots)
 - **Macro Scoring** — DXY, VIX, yields, oil, central bank policy impact on gold
 - **Sentiment Engine** — Fear & Greed Index, news sentiment, headline analysis
@@ -15,21 +15,39 @@ An institutional-grade **Gold Pre-Session Analysis Dashboard** that delivers a o
 - **Trade Setups** — Entry/stop/target levels with R:R ratios
 - **Risk Parameters** — ATR-based stops, position sizing for multiple account sizes
 
+### ⚡ Advanced modules (v2.0)
+
+- **Machine Learning Direction Model** — Random Forest + Gradient Boosting + Logistic ensemble, *strictly walk-forward validated* (no look-ahead). Reports next-session up-probability, out-of-sample accuracy vs baseline, ROC-AUC, per-model agreement, and feature importances.
+- **Monte Carlo Projection** — 20k simulations of the next session calibrated to recent log-return stats: percentile cones, 1σ band, return distribution histogram, and probability of hitting ±0.5–2% targets.
+- **Signal Backtest** — Historical edge of each technical rule (forward N-day return, win-rate, edge vs baseline) plus a composite-score long/flat strategy vs buy-and-hold (Sharpe, max drawdown, equity curve).
+- **Market Structure** — S/R **confluence zones** (clusters pivots + fibs + MAs), candlestick pattern recognition, **ADX** trend strength, intraday **VWAP**, and the **Gold/Silver ratio**.
+- **Seasonality** — Monthly and day-of-week return patterns over ~15 years, with the current calendar period highlighted.
+- **Event Risk & Scenarios** — Proximity to FOMC / NFP / CPI / PCE, a pre-session risk checklist, gold priced in EUR/JPY/GBP, and macro-sensitivity betas (what gold does on a DXY or 10Y-yield move).
+- **Dashboard UX** — Refresh / Export (print) / Auto-refresh toolbar and a print-friendly stylesheet.
+
+> The ML and statistical outputs are intentionally honest: on daily gold, direction is close to a coin flip, so accuracy sits near baseline. The edge is in the *probabilities, feature attributions, and regime context* — not false precision. **Research/education only, not financial advice.**
+
 ## Project Structure
 
 ```
 gold-trading-execution/
 ├── run_session.py              # One-click entry point
 ├── requirements.txt            # Dependencies
-├── engine/                     # Analysis engine (8 modules)
+├── engine/                     # Analysis engine (14 modules)
 │   ├── __init__.py
-│   ├── data_fetcher.py         # Live gold + MCX + cross-asset data
+│   ├── data_fetcher.py         # Live gold + MCX + cross-asset + long history + FX
 │   ├── technical_analyzer.py   # 50+ indicators, Fibonacci, Ichimoku
 │   ├── macro_scorer.py         # DXY, yields, VIX, oil scoring
 │   ├── sentiment_engine.py     # Reads existing pipeline data
 │   ├── volatility_analyzer.py  # Vol surface, percentile, ATR
 │   ├── correlation_engine.py   # Cross-asset correlation heatmap
-│   ├── signal_generator.py     # Composite alpha signal
+│   ├── ml_engine.py            # Walk-forward ML ensemble (RF + GB + Logistic)
+│   ├── montecarlo_engine.py    # Monte Carlo next-session projection
+│   ├── backtest_engine.py      # Rule edges + composite-score strategy backtest
+│   ├── structure_engine.py     # Confluence zones, patterns, ADX, VWAP, G:S ratio
+│   ├── seasonality_engine.py   # Monthly / day-of-week seasonal patterns
+│   ├── scenario_engine.py      # Event calendar, macro betas, gold-in-FX, checklist
+│   ├── signal_generator.py     # Composite alpha signal (+ ML & seasonality blend)
 │   └── session_planner.py      # Session gameplan + MCX India
 ├── dashboard/                  # Browser-based UI
 │   ├── index.html              # Layout

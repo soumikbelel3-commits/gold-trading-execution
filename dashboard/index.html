@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gold Pre-Session Analysis | XAU/USD & MCX Gold</title>
     <meta name="description" content="Institutional-grade gold trading pre-session analysis dashboard. Technical analysis, macro scoring, sentiment, volatility, and trade setups.">
-    <link rel="stylesheet" href="styles.css?v=linear">
+    <link rel="stylesheet" href="styles.css?v=4">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -37,6 +37,11 @@
                     <div class="header-right">
                         <span class="session-badge" id="active-session">--</span>
                         <span class="timestamp" id="timestamp">--</span>
+                        <div class="toolbar">
+                            <button class="tool-btn" id="refresh-btn" title="Reload latest data">⟳ Refresh</button>
+                            <button class="tool-btn" id="print-btn" title="Print / export session briefing">⎙ Export</button>
+                            <label class="autorefresh"><input type="checkbox" id="autorefresh-toggle"> Auto</label>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -229,6 +234,110 @@
                 </div>
             </div>
 
+            <!-- ROW 7: ML Prediction + Monte Carlo -->
+            <div class="grid grid-2">
+                <!-- MACHINE LEARNING -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🤖 ML Direction Model</h2>
+                        <span class="badge" id="ml-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="ml-content"></div>
+                    </div>
+                </div>
+
+                <!-- MONTE CARLO -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🎲 Monte Carlo Projection</h2>
+                        <span class="badge" id="mc-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="mc-content"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 8: Market Structure -->
+            <div class="grid grid-2">
+                <!-- CONFLUENCE ZONES -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🧲 Confluence Zones</h2>
+                        <span class="badge badge-info">Pivots · Fibs · MAs</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="confluence-zones"></div>
+                    </div>
+                </div>
+
+                <!-- STRUCTURE SIGNALS -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🏗️ Structure & Trend</h2>
+                        <span class="badge" id="adx-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="structure-content"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 9: Seasonality + Backtest -->
+            <div class="grid grid-2">
+                <!-- SEASONALITY -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📅 Seasonality</h2>
+                        <span class="badge" id="season-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="seasonality-summary" class="mb-2"></div>
+                        <div id="seasonality-months"></div>
+                        <div id="seasonality-dow" class="mt-2"></div>
+                    </div>
+                </div>
+
+                <!-- BACKTEST -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📜 Signal Backtest</h2>
+                        <span class="badge badge-info" id="bt-badge">--</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="backtest-strategy" class="mb-2"></div>
+                        <div class="chart-container" id="equity-chart" style="height:160px;"></div>
+                        <div id="backtest-rules" class="mt-2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ROW 10: Event Risk + Scenario -->
+            <div class="grid grid-2">
+                <!-- EVENT CALENDAR + CHECKLIST -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🗓️ Event Risk & Checklist</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="event-calendar" class="mb-2"></div>
+                        <div id="risk-checklist"></div>
+                    </div>
+                </div>
+
+                <!-- SCENARIOS + GOLD IN FX -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🌍 Scenarios & Gold in FX</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="gold-in-fx" class="mb-2"></div>
+                        <div id="macro-scenarios"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- FOOTER -->
             <footer class="footer">
                 Gold Pre-Session Analysis Dashboard · Data from yfinance & Quant Research Pipeline · 
@@ -237,6 +346,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=linear"></script>
+    <script src="app.js?v=2"></script>
 </body>
 </html>
