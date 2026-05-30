@@ -52,6 +52,12 @@ from engine.volatility_analyzer import GoldVolatilityAnalyzer
 from engine.correlation_engine import GoldCorrelationEngine
 from engine.signal_generator import GoldSignalGenerator
 from engine.session_planner import GoldSessionPlanner
+from engine.seasonality_engine import GoldSeasonalityEngine
+from engine.montecarlo_engine import GoldMonteCarloEngine
+from engine.backtest_engine import GoldBacktestEngine
+from engine.structure_engine import GoldStructureEngine
+from engine.scenario_engine import GoldScenarioEngine
+from engine.ml_engine import GoldMLEngine
 
 
 # ═══════════════════════════════════════════════════════════
@@ -118,7 +124,45 @@ def run_analysis() -> dict:
     )
     correlation = corr_engine.analyze()
     print(f"  [OK] Correlation regime: {correlation['regime']}")
-    
+
+    daily_df = data["gold"].get("daily", __import__('pandas').DataFrame())
+    h1_df = data["gold"].get("1h", __import__('pandas').DataFrame())
+    gold_long = data.get("gold_long", __import__('pandas').DataFrame())
+
+    # ── 6b. Market Structure ──
+    print("[STRUCT] Analyzing market structure (confluence, patterns, ADX, VWAP)...")
+    structure = GoldStructureEngine(
+        daily_df, h1_df, technical, data.get("cross_assets", {})
+    ).analyze()
+    print(f"  [OK] Confluence zones: {len(structure.get('confluence_zones', []))}, "
+          f"ADX: {structure.get('adx', {}).get('strength', 'N/A')}")
+
+    # ── 6c. Seasonality ──
+    print("[SEASON] Computing seasonal patterns...")
+    seasonality = GoldSeasonalityEngine(gold_long).analyze()
+    print(f"  [OK] {seasonality.get('summary', 'N/A')[:70]}")
+
+    # ── 6d. Monte Carlo ──
+    print("[MC] Running Monte Carlo next-session projection...")
+    montecarlo = GoldMonteCarloEngine(daily_df).analyze()
+    if montecarlo.get("available"):
+        print(f"  [OK] P(up)={montecarlo['prob_up']}%  band ${montecarlo['expected_band']['low']}-${montecarlo['expected_band']['high']}")
+
+    # ── 6e. Backtest ──
+    print("[BT] Backtesting technical rules & composite strategy...")
+    backtest = GoldBacktestEngine(gold_long).analyze()
+    if backtest.get("available"):
+        print(f"  [OK] {len(backtest.get('rules', []))} rules backtested over {backtest.get('baseline', {}).get('samples', 0)} samples")
+
+    # ── 6f. Machine Learning ──
+    print("[ML] Training ML ensemble (RF + GB + Logistic, walk-forward)...")
+    ml = GoldMLEngine(gold_long).analyze()
+    if ml.get("available"):
+        print(f"  [OK] Ensemble OOS acc {ml['ensemble']['accuracy']}% (baseline {ml['ensemble']['baseline_accuracy']}%) | "
+              f"Next: {ml['prediction']['direction']} {ml['prediction']['prob_up']}%")
+    else:
+        print(f"  [!] ML unavailable: {ml.get('reason', 'unknown')}")
+
     # ── 7. Composite Signal ──
     print("[SIGNAL] Generating composite signal...")
     signal_gen = GoldSignalGenerator()
@@ -129,6 +173,8 @@ def run_analysis() -> dict:
         volatility=volatility,
         correlation=correlation,
         pipeline_signals=data.get("pipeline_signals"),
+        ml=ml,
+        seasonality=seasonality,
     )
     print(f"  [OK] Signal: {composite_signal['signal']:+.4f} ({composite_signal['action']})")
     print(f"  [OK] Confidence: {composite_signal['confidence']:.1%}")
@@ -144,21 +190,40 @@ def run_analysis() -> dict:
     )
     session_plan = planner.plan()
     print(f"  [OK] Active session: {session_plan['active_session']}")
-    
+
+    # ── 9. Scenario & Event Risk ──
+    print("[SCENARIO] Building event calendar, macro betas, FX, checklist...")
+    scenario = GoldScenarioEngine(
+        technical=technical,
+        gold_daily=daily_df,
+        cross_assets=data.get("cross_assets", {}),
+        fx=data.get("fx", {}),
+        macro=macro,
+        volatility=volatility,
+    ).analyze()
+    next_evt = scenario.get("events", [{}])[0] if scenario.get("events") else {}
+    print(f"  [OK] Next event: {next_evt.get('event', 'N/A')} in {next_evt.get('days_until', '?')}d")
+
     # ── Assemble Output ──
     elapsed = time.time() - start_time
-    
+
     output = {
         "meta": {
             "generated_at": datetime.now().isoformat(),
             "elapsed_seconds": round(elapsed, 2),
-            "version": "1.0.0",
+            "version": "2.0.0",
         },
         "technical": technical,
         "macro": macro,
         "sentiment": sentiment,
         "volatility": volatility,
         "correlation": correlation,
+        "structure": structure,
+        "seasonality": seasonality,
+        "montecarlo": montecarlo,
+        "backtest": backtest,
+        "ml": ml,
+        "scenario": scenario,
         "composite_signal": composite_signal,
         "session_plan": session_plan,
     }

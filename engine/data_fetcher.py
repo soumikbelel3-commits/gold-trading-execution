@@ -92,6 +92,42 @@ class GoldDataFetcher:
         
         return result
     
+    def fetch_gold_long_history(self) -> pd.DataFrame:
+        """
+        Fetch a long daily history of gold futures (max available) for
+        machine-learning, seasonality, and backtesting modules that need
+        many years of samples rather than a single year.
+        """
+        try:
+            hist = yf.download("GC=F", period="max", interval="1d", progress=False)
+            if isinstance(hist.columns, pd.MultiIndex):
+                hist.columns = hist.columns.get_level_values(0)
+            # Keep at most ~15 years to bound compute
+            if len(hist) > 3800:
+                hist = hist.tail(3800)
+            return hist
+        except Exception as e:
+            print(f"  WARNING: Long-history gold data error: {e}")
+            return pd.DataFrame()
+
+    def fetch_fx_rates(self) -> dict:
+        """
+        Fetch FX rates used to express gold in non-USD currencies.
+        Returns latest spot rates for EUR/USD, USD/JPY, and GBP/USD.
+        (USD/INR is fetched separately within the MCX block.)
+        """
+        rates = {}
+        fx_map = {"EURUSD": "EURUSD=X", "USDJPY": "USDJPY=X", "GBPUSD": "GBPUSD=X"}
+        for name, ticker in fx_map.items():
+            try:
+                df = yf.download(ticker, period="5d", interval="1d", progress=False)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+                rates[name] = float(df["Close"].iloc[-1]) if not df.empty else None
+            except Exception:
+                rates[name] = None
+        return rates
+
     def fetch_mcx_gold(self) -> dict:
         """
         Fetch MCX Gold data (INR-denominated gold futures proxy).
@@ -288,7 +324,13 @@ class GoldDataFetcher:
         
         print("  > Gold multi-timeframe (1H, 4H, Daily)...")
         data["gold"] = self.fetch_gold_multi_timeframe()
-        
+
+        print("  > Gold long history (ML / seasonality / backtest)...")
+        data["gold_long"] = self.fetch_gold_long_history()
+
+        print("  > FX rates (gold in EUR / JPY / GBP)...")
+        data["fx"] = self.fetch_fx_rates()
+
         print("  > MCX Gold / India data...")
         data["mcx"] = self.fetch_mcx_gold()
         

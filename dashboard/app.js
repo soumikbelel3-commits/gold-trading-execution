@@ -41,8 +41,17 @@ function renderAll() {
     renderMCX();
     renderTradeSetups();
     renderRiskParams();
+    renderML();
+    renderMonteCarlo();
+    renderConfluence();
+    renderStructure();
+    renderSeasonality();
+    renderBacktest();
+    renderEvents();
+    renderScenarios();
     setupChartTabs();
     setupPivotTabs();
+    setupToolbar();
 }
 
 // ═══════════════════════════════════════
@@ -119,7 +128,7 @@ function renderSignalBar() {
     breakdownEl.innerHTML = '';
     
     if (sig.breakdown) {
-        const items = ['technical', 'macro', 'sentiment', 'volatility', 'correlation'];
+        const items = ['technical', 'macro', 'sentiment', 'volatility', 'correlation', 'ml', 'seasonality'];
         items.forEach(key => {
             const b = sig.breakdown[key];
             if (!b) return;
@@ -402,7 +411,35 @@ function renderMacro() {
     
     const factors = macro.factors || {};
     let html = '';
-    
+
+    // ── Macro tilt gauge ──
+    const cs = macro.composite_score || 0;
+    const maxp = macro.max_possible || 18;
+    const tiltPct = Math.max(0, Math.min(100, ((cs + maxp) / (2 * maxp)) * 100));
+    html += `
+        <div style="margin-bottom:12px;">
+            <div class="flex-between" style="font-size:0.62rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">
+                <span>Bearish Gold</span><span>Macro Tilt</span><span>Bullish Gold</span>
+            </div>
+            <div style="position:relative; height:10px; background:linear-gradient(90deg, var(--red), var(--bg-elevated), var(--green)); border-radius:6px;">
+                <div style="position:absolute; top:-3px; left:${tiltPct}%; transform:translateX(-50%); width:4px; height:16px; background:var(--text-highlight); border-radius:2px; box-shadow:0 0 6px rgba(0,0,0,0.6);"></div>
+            </div>
+            <div style="text-align:center; font-size:0.7rem; margin-top:6px; color:${regimeColor};">${cs >= 0 ? '+' : ''}${cs} / ±${maxp} composite</div>
+        </div>
+    `;
+
+    // ── Key macro readings tiles ──
+    const readings = [
+        { k: 'DXY', v: factors.DXY?.value, fmt: v => v?.toFixed(1) },
+        { k: 'VIX', v: factors.VIX?.value, fmt: v => v?.toFixed(1) },
+        { k: '10Y Yield', v: factors.Yields?.value, fmt: v => v?.toFixed(2) + '%' },
+        { k: 'Curve 10-2', v: factors.Yield_Curve?.value, fmt: v => (v >= 0 ? '+' : '') + v?.toFixed(2) + '%' },
+    ].filter(r => r.v != null);
+    if (readings.length) {
+        html += `<div class="fx-grid" style="margin-bottom:12px;">${readings.map(r => `
+            <div class="fx-cell"><div class="fx-cur">${r.k}</div><div class="fx-val">${r.fmt(r.v)}</div></div>`).join('')}</div>`;
+    }
+
     for (const [name, factor] of Object.entries(factors)) {
         const score = factor.score || 0;
         const cls = score > 0 ? 'bullish' : score < 0 ? 'bearish' : 'neutral';
@@ -836,13 +873,34 @@ function renderMCX() {
 function renderTradeSetups() {
     const setups = DATA.session_plan?.trade_setups || [];
     const container = document.getElementById('trade-setups');
-    
+    const sig = DATA.composite_signal || {};
+    const price = DATA.technical?.current_price;
+    const zones = DATA.structure?.confluence_zones || [];
+
+    // ── Always-on context: bias + nearest trigger levels ──
+    const nearestRes = zones.filter(z => z.side === 'resistance').sort((a, b) => a.dist_pct - b.dist_pct)[0];
+    const nearestSup = zones.filter(z => z.side === 'support').sort((a, b) => b.dist_pct - a.dist_pct)[0];
+    const actColor = sig.action?.includes('BUY') ? 'var(--green)' : sig.action?.includes('SELL') ? 'var(--red)' : 'var(--amber)';
+    let contextHtml = `
+        <div style="padding:10px; background:var(--bg-elevated); border-radius:var(--radius-xs); margin-bottom:10px;">
+            <div class="flex-between" style="margin-bottom:6px;">
+                <span style="font-size:0.7rem; color:var(--text-muted);">Bias</span>
+                <span style="font-size:0.78rem; font-weight:700; color:${actColor};">${sig.action || '--'} · ${((sig.confidence || 0) * 100).toFixed(0)}%</span>
+            </div>
+            <div class="trade-levels" style="margin:0;">
+                <div class="trade-level"><div class="label">Break Above</div><div class="price text-green">${nearestRes ? '$' + nearestRes.center.toFixed(0) : '—'}</div></div>
+                <div class="trade-level"><div class="label">Spot</div><div class="price text-gold">${price ? '$' + price.toFixed(0) : '—'}</div></div>
+                <div class="trade-level"><div class="label">Break Below</div><div class="price text-red">${nearestSup ? '$' + nearestSup.center.toFixed(0) : '—'}</div></div>
+            </div>
+        </div>`;
+
     if (setups.length === 0) {
-        container.innerHTML = '<div class="text-muted">No trade setups generated. Signal may be too weak for high-conviction entries.</div>';
+        container.innerHTML = contextHtml +
+            `<div class="text-muted" style="font-size:0.72rem;">No high-conviction setup right now — composite signal is too weak/neutral for a directional entry. Trade the trigger levels above with confirmation, or stand aside.</div>`;
         return;
     }
-    
-    container.innerHTML = setups.map(setup => {
+
+    container.innerHTML = contextHtml + setups.map(setup => {
         const type = (setup.type || 'range').toLowerCase();
         
         let levelsHtml = '';
@@ -980,6 +1038,480 @@ function renderRiskParams() {
     }
     
     container.innerHTML = html;
+}
+
+// ═══════════════════════════════════════
+// MACHINE LEARNING
+// ═══════════════════════════════════════
+function renderML() {
+    const ml = DATA.ml || {};
+    const container = document.getElementById('ml-content');
+    const badge = document.getElementById('ml-badge');
+
+    if (!ml.available) {
+        badge.textContent = 'N/A';
+        container.innerHTML = `<div class="text-muted">ML model unavailable: ${ml.reason || 'insufficient data'}</div>`;
+        return;
+    }
+
+    const pred = ml.prediction || {};
+    const ens = ml.ensemble || {};
+    const probUp = pred.prob_up || 50;
+    const dirColor = pred.direction === 'UP' ? 'var(--green)' : 'var(--red)';
+
+    badge.textContent = `${pred.direction} ${probUp}%`;
+    badge.style.color = dirColor;
+    badge.style.background = pred.direction === 'UP' ? 'var(--green-bg)' : 'var(--red-bg)';
+
+    // Edge vs baseline
+    const edge = ens.accuracy != null && ens.baseline_accuracy != null
+        ? (ens.accuracy - ens.baseline_accuracy) : null;
+    const edgeColor = edge > 0.5 ? 'var(--green)' : edge < -0.5 ? 'var(--red)' : 'var(--amber)';
+
+    let html = `
+        <div class="ml-prob-wrap">
+            <div class="ml-dir" style="color:${dirColor}">${pred.direction === 'UP' ? '▲' : '▼'} ${pred.direction}</div>
+            <div style="font-size:0.65rem; color:var(--text-muted);">Next session · ${pred.confidence}% conviction</div>
+            <div class="ml-prob-bar">
+                <div class="ml-prob-seg ml-prob-up" style="width:${probUp}%">${probUp}%</div>
+                <div class="ml-prob-seg ml-prob-dn" style="width:${100 - probUp}%">${pred.prob_down}%</div>
+            </div>
+        </div>
+        <div class="ml-metrics">
+            <div class="ml-metric"><div class="label">OOS Accuracy</div><div class="value">${ens.accuracy ?? '--'}%</div></div>
+            <div class="ml-metric"><div class="label">Baseline</div><div class="value">${ens.baseline_accuracy ?? '--'}%</div></div>
+            <div class="ml-metric"><div class="label">ROC AUC</div><div class="value">${ens.auc ?? '--'}</div></div>
+        </div>
+        <div style="font-size:0.65rem; color:${edgeColor}; text-align:center; margin-bottom:8px;">
+            ${edge != null ? (edge >= 0 ? '+' : '') + edge.toFixed(1) + '% edge over baseline' : ''}
+            · Walk-forward validated on ${ml.samples} samples
+        </div>
+    `;
+
+    // Per-model agreement
+    if (pred.per_model) {
+        html += `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">Model agreement (P up)</div>`;
+        html += pred.per_model.map(m => `
+            <div class="metric-row"><span class="k">${m.name}</span>
+            <span class="v" style="color:${m.prob_up >= 50 ? 'var(--green)' : 'var(--red)'}">${m.prob_up}%</span></div>
+        `).join('');
+    }
+
+    // Feature importance
+    if (ml.feature_importance && ml.feature_importance.length) {
+        const max = ml.feature_importance[0].importance || 1;
+        html += `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin:10px 0 6px;">Top predictive features</div>`;
+        html += ml.feature_importance.slice(0, 8).map(f => `
+            <div class="feat-bar-row">
+                <span class="feat-bar-label">${f.feature}</span>
+                <div class="feat-bar-track"><div class="feat-bar-fill" style="width:${(f.importance / max * 100).toFixed(0)}%"></div></div>
+                <span style="width:34px; text-align:right; color:var(--text-secondary)">${f.importance}%</span>
+            </div>
+        `).join('');
+    }
+
+    container.innerHTML = html;
+}
+
+// ═══════════════════════════════════════
+// MONTE CARLO
+// ═══════════════════════════════════════
+function renderMonteCarlo() {
+    const mc = DATA.montecarlo || {};
+    const container = document.getElementById('mc-content');
+    const badge = document.getElementById('mc-badge');
+
+    if (!mc.available) {
+        badge.textContent = 'N/A';
+        container.innerHTML = '<div class="text-muted">Monte Carlo unavailable</div>';
+        return;
+    }
+
+    badge.textContent = `P(up) ${mc.prob_up}%`;
+    badge.style.color = mc.prob_up >= 50 ? 'var(--green)' : 'var(--red)';
+    badge.style.background = mc.prob_up >= 50 ? 'var(--green-bg)' : 'var(--red-bg)';
+
+    const p = mc.percentiles || {};
+    let html = `
+        <div style="font-size:0.65rem; color:var(--text-muted); margin-bottom:6px;">
+            ${mc.n_sims.toLocaleString()} simulations · spot $${mc.spot} · daily σ ${mc.daily_vol_pct}%
+        </div>
+        <div class="mc-pctl-grid">
+            ${[['5th', p.p5, 'var(--red)'], ['25th', p.p25, 'var(--amber)'], ['50th', p.p50, 'var(--text-primary)'], ['75th', p.p75, 'var(--amber)'], ['95th', p.p95, 'var(--green)']]
+                .map(([lbl, v, c]) => `<div class="mc-pctl"><div class="p">${lbl}</div><div class="pv" style="color:${c}">$${v != null ? v.toFixed(0) : '--'}</div></div>`).join('')}
+        </div>
+    `;
+
+    // Histogram with 1-sigma band highlighted
+    const hist = mc.histogram || {};
+    const band = mc.expected_band || {};
+    if (hist.counts && hist.counts.length) {
+        const maxC = Math.max(...hist.counts);
+        html += `<div class="mc-hist">`;
+        hist.counts.forEach((c, i) => {
+            const edgeLow = hist.edges[i], edgeHigh = hist.edges[i + 1];
+            const inBand = edgeHigh >= band.low && edgeLow <= band.high;
+            const h = maxC > 0 ? (c / maxC * 100) : 0;
+            html += `<div class="mc-hist-bar ${inBand ? 'in-band' : ''}" style="height:${h}%" title="$${edgeLow.toFixed(0)}–$${edgeHigh.toFixed(0)}"></div>`;
+        });
+        html += `</div>`;
+        html += `<div class="mc-band-labels"><span>$${hist.edges[0].toFixed(0)}</span><span style="color:var(--gold-light)">1σ band $${band.low}–$${band.high}</span><span>$${hist.edges[hist.edges.length - 1].toFixed(0)}</span></div>`;
+    }
+
+    // Target probabilities
+    if (mc.target_probabilities) {
+        html += `<table class="indicator-table" style="margin-top:10px;"><thead><tr><th>Move</th><th>↑ Level</th><th>P(≥)</th><th>↓ Level</th><th>P(≤)</th></tr></thead><tbody>`;
+        mc.target_probabilities.forEach(t => {
+            html += `<tr>
+                <td>±${t.move_pct}%</td>
+                <td class="text-green">$${t.up_level.toFixed(0)}</td>
+                <td>${t.prob_up_close}%</td>
+                <td class="text-red">$${t.dn_level.toFixed(0)}</td>
+                <td>${t.prob_dn_close}%</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+    }
+
+    container.innerHTML = html;
+}
+
+// ═══════════════════════════════════════
+// CONFLUENCE ZONES
+// ═══════════════════════════════════════
+function renderConfluence() {
+    const zones = DATA.structure?.confluence_zones || [];
+    const container = document.getElementById('confluence-zones');
+
+    if (!zones.length) {
+        container.innerHTML = '<div class="text-muted">No confluence zones detected near current price.</div>';
+        return;
+    }
+
+    container.innerHTML = zones.map(z => {
+        const dots = Array(Math.min(z.strength, 6)).fill('<span class="zone-dot"></span>').join('');
+        const distColor = z.dist_pct > 0 ? 'var(--red)' : 'var(--green)';
+        return `
+            <div class="zone-item ${z.side}">
+                <div class="zone-head">
+                    <span class="zone-price">$${z.center.toFixed(2)}</span>
+                    <span class="zone-strength" title="${z.strength} overlapping levels">${dots}</span>
+                </div>
+                <div class="zone-head">
+                    <span class="zone-dist" style="color:${distColor}">${z.dist_pct >= 0 ? '+' : ''}${z.dist_pct}% · ${z.side}</span>
+                    <span class="zone-dist">$${z.low.toFixed(0)}–$${z.high.toFixed(0)}</span>
+                </div>
+                <div class="zone-sources">${z.sources.join(' · ')}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ═══════════════════════════════════════
+// STRUCTURE (ADX / VWAP / patterns / G:S ratio)
+// ═══════════════════════════════════════
+function renderStructure() {
+    const s = DATA.structure || {};
+    const container = document.getElementById('structure-content');
+    const badge = document.getElementById('adx-badge');
+
+    const adx = s.adx || {};
+    if (adx.adx != null) {
+        badge.textContent = `ADX ${adx.adx} · ${adx.direction}`;
+        badge.style.color = adx.direction === 'Bullish' ? 'var(--green)' : 'var(--red)';
+        badge.style.background = adx.direction === 'Bullish' ? 'var(--green-bg)' : 'var(--red-bg)';
+    } else { badge.textContent = '--'; }
+
+    let html = '';
+
+    // Swing structure
+    const sw = s.swing_structure || {};
+    if (sw.label) {
+        const c = sw.bias === 'Bullish' ? 'var(--green)' : sw.bias === 'Bearish' ? 'var(--red)' : 'var(--amber)';
+        const bg = sw.bias === 'Bullish' ? 'var(--green-bg)' : sw.bias === 'Bearish' ? 'var(--red-bg)' : 'var(--amber-bg)';
+        html += `
+            <div style="padding:8px 10px; background:${bg}; border-radius:var(--radius-xs); border-left:3px solid ${c}; margin-bottom:10px;">
+                <div style="font-size:0.75rem; font-weight:600; color:${c};">${sw.label}</div>
+                <div style="font-size:0.62rem; color:var(--text-muted); margin-top:2px;">Swing range $${sw.recent_low?.toFixed(0)}–$${sw.recent_high?.toFixed(0)} · price at ${sw.range_position_pct}% of range</div>
+                <div style="margin-top:5px; height:6px; background:var(--bg-elevated); border-radius:3px; overflow:hidden;">
+                    <div style="height:100%; width:${sw.range_position_pct}%; background:${c};"></div>
+                </div>
+            </div>`;
+    }
+
+    if (adx.adx != null) {
+        html += `
+            <div class="metric-row"><span class="k">Trend Strength (ADX)</span><span class="v">${adx.adx} — ${adx.strength}</span></div>
+            <div class="metric-row"><span class="k">+DI / −DI</span><span class="v"><span class="text-green">${adx.plus_di}</span> / <span class="text-red">${adx.minus_di}</span></span></div>
+        `;
+    }
+
+    const vwap = s.vwap || {};
+    if (vwap.vwap != null) {
+        const c = vwap.position.includes('Above') ? 'var(--green)' : 'var(--red)';
+        html += `<div class="metric-row"><span class="k">VWAP (intraday)</span><span class="v">$${vwap.vwap.toFixed(2)} <span style="color:${c}; font-size:0.62rem;">(${vwap.dist_pct >= 0 ? '+' : ''}${vwap.dist_pct}%)</span></span></div>`;
+    }
+
+    const gsr = s.gold_silver_ratio || {};
+    if (gsr.ratio != null) {
+        html += `<div class="metric-row"><span class="k">Gold/Silver Ratio</span><span class="v">${gsr.ratio}</span></div>
+                 <div style="font-size:0.62rem; color:var(--text-muted); margin:2px 0 8px;">${gsr.regime}</div>`;
+    }
+
+    // Patterns
+    const patterns = s.patterns || [];
+    if (patterns.length) {
+        html += `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin:8px 0 4px;">Candlestick Patterns</div>`;
+        html += patterns.map(p => {
+            const c = p.bias === 'Bullish' ? 'var(--green)' : p.bias === 'Bearish' ? 'var(--red)' : 'var(--amber)';
+            const bg = p.bias === 'Bullish' ? 'var(--green-bg)' : p.bias === 'Bearish' ? 'var(--red-bg)' : 'var(--amber-bg)';
+            return `<div class="pattern-item">
+                <span class="pattern-tag" style="color:${c}; background:${bg}">${p.bias}</span>
+                <span><strong style="color:var(--text-primary)">${p.name}</strong><br><span style="color:var(--text-muted)">${p.note}</span></span>
+            </div>`;
+        }).join('');
+    }
+
+    container.innerHTML = html || '<div class="text-muted">No structure data</div>';
+}
+
+// ═══════════════════════════════════════
+// SEASONALITY
+// ═══════════════════════════════════════
+function renderSeasonality() {
+    const s = DATA.seasonality || {};
+    const container = document.getElementById('seasonality-months');
+    const badge = document.getElementById('season-badge');
+    const summaryEl = document.getElementById('seasonality-summary');
+
+    const months = s.monthly || [];
+    if (!months.length) {
+        badge.textContent = 'N/A';
+        summaryEl.innerHTML = '<div class="text-muted">Insufficient history for seasonality.</div>';
+        container.innerHTML = '';
+        return;
+    }
+
+    const cm = s.current_month || {};
+    badge.textContent = cm.month ? `${cm.month} ${cm.avg_return_pct >= 0 ? '+' : ''}${cm.avg_return_pct}%` : '--';
+    const sc = s.seasonal_score || 0;
+    badge.style.color = sc > 0 ? 'var(--green)' : sc < 0 ? 'var(--red)' : 'var(--amber)';
+    badge.style.background = sc > 0 ? 'var(--green-bg)' : sc < 0 ? 'var(--red-bg)' : 'var(--amber-bg)';
+
+    summaryEl.innerHTML = `<div style="font-size:0.72rem; color:var(--text-secondary);">${s.summary}</div>
+        <div style="font-size:0.6rem; color:var(--text-muted); margin-top:2px;">Based on ${s.years_of_data} years of history</div>`;
+
+    const maxAbs = Math.max(...months.map(m => Math.abs(m.avg_return_pct)), 0.5);
+    let bars = `<div class="season-grid">`;
+    months.forEach(m => {
+        const h = Math.abs(m.avg_return_pct) / maxAbs * 100;
+        const isCur = cm.month_num === m.month_num;
+        bars += `<div class="season-col" title="${m.month}: ${m.avg_return_pct >= 0 ? '+' : ''}${m.avg_return_pct}% avg, ${m.win_rate}% win">
+            <div class="season-bar ${m.avg_return_pct >= 0 ? 'pos' : 'neg'} ${isCur ? 'current' : ''}" style="height:${Math.max(h, 3)}%"></div>
+            <span class="season-mlabel">${m.month[0]}</span>
+        </div>`;
+    });
+    bars += `</div><div style="font-size:0.58rem; color:var(--text-muted); text-align:center;">Avg monthly return by calendar month (green=positive)</div>`;
+    container.innerHTML = bars;
+
+    // Day of week
+    const dowEl = document.getElementById('seasonality-dow');
+    const dows = s.day_of_week || [];
+    const curDow = (s.current_dow || {}).dow_num;
+    let dowHtml = '';
+    if (dows.length) {
+        dowHtml += `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">Avg return by weekday</div>`;
+        dowHtml += `<div class="dow-grid">${dows.map(d => `
+            <div class="dow-cell ${d.dow_num === curDow ? 'current' : ''}">
+                <div class="d">${d.day}</div>
+                <div class="r" style="color:${d.avg_return_pct >= 0 ? 'var(--green)' : 'var(--red)'}">${d.avg_return_pct >= 0 ? '+' : ''}${d.avg_return_pct}%</div>
+            </div>`).join('')}</div>`;
+    }
+
+    // Quarterly strip
+    const qs = s.quarterly || [];
+    const curQ = (s.current_quarter || {}).quarter_num;
+    if (qs.length) {
+        dowHtml += `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin:10px 0 4px;">Quarterly seasonality</div>`;
+        dowHtml += `<div class="dow-grid">${qs.map(q => `
+            <div class="dow-cell ${q.quarter_num === curQ ? 'current' : ''}">
+                <div class="d">${q.quarter}</div>
+                <div class="r" style="color:${q.avg_return_pct >= 0 ? 'var(--green)' : 'var(--red)'}">${q.avg_return_pct >= 0 ? '+' : ''}${q.avg_return_pct}%</div>
+                <div style="font-size:0.55rem; color:var(--text-muted)">${q.win_rate}% win</div>
+            </div>`).join('')}</div>`;
+    }
+
+    // Best / worst months
+    const best = s.best_months || [], worst = s.worst_months || [];
+    if (best.length && worst.length) {
+        const chip = (m, up) => `<span style="display:inline-block; font-size:0.62rem; padding:2px 7px; margin:2px; border-radius:10px; background:${up ? 'var(--green-bg)' : 'var(--red-bg)'}; color:${up ? 'var(--green)' : 'var(--red)'};">${m.month} ${m.avg_return_pct >= 0 ? '+' : ''}${m.avg_return_pct}%</span>`;
+        dowHtml += `<div style="margin-top:10px; font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:2px;">Strongest months</div>
+            <div>${best.map(m => chip(m, true)).join('')}</div>
+            <div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin:6px 0 2px;">Weakest months</div>
+            <div>${worst.map(m => chip(m, false)).join('')}</div>`;
+    }
+
+    dowEl.innerHTML = dowHtml;
+}
+
+// ═══════════════════════════════════════
+// BACKTEST
+// ═══════════════════════════════════════
+function renderBacktest() {
+    const bt = DATA.backtest || {};
+    const stratEl = document.getElementById('backtest-strategy');
+    const rulesEl = document.getElementById('backtest-rules');
+    const badge = document.getElementById('bt-badge');
+
+    if (!bt.available) {
+        badge.textContent = 'N/A';
+        stratEl.innerHTML = '<div class="text-muted">Backtest unavailable</div>';
+        return;
+    }
+    badge.textContent = `${bt.horizon_days}d forward`;
+
+    const st = bt.strategy || {};
+    if (st.strategy) {
+        const s = st.strategy, b = st.buy_hold || {};
+        stratEl.innerHTML = `
+            <div style="font-size:0.65rem; color:var(--text-muted); margin-bottom:6px;">${st.description}</div>
+            <div class="bt-compare">
+                <div class="bt-col strat">
+                    <h4>📈 Score Strategy</h4>
+                    <div class="metric-row"><span class="k">Total</span><span class="v" style="color:${s.total_return_pct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.total_return_pct}%</span></div>
+                    <div class="metric-row"><span class="k">Sharpe</span><span class="v">${s.sharpe}</span></div>
+                    <div class="metric-row"><span class="k">Max DD</span><span class="v text-red">${s.max_drawdown_pct}%</span></div>
+                    <div class="metric-row"><span class="k">In market</span><span class="v">${s.time_in_market_pct}%</span></div>
+                </div>
+                <div class="bt-col">
+                    <h4>🪙 Buy & Hold</h4>
+                    <div class="metric-row"><span class="k">Total</span><span class="v" style="color:${b.total_return_pct >= 0 ? 'var(--green)' : 'var(--red)'}">${b.total_return_pct}%</span></div>
+                    <div class="metric-row"><span class="k">Sharpe</span><span class="v">${b.sharpe}</span></div>
+                    <div class="metric-row"><span class="k">Max DD</span><span class="v text-red">${b.max_drawdown_pct}%</span></div>
+                    <div class="metric-row"><span class="k">Ann.</span><span class="v">${b.annual_return_pct}%</span></div>
+                </div>
+            </div>
+        `;
+        renderEquityCurve(st.equity_curve || []);
+    }
+
+    // Rule edges
+    const rules = bt.rules || [];
+    if (rules.length) {
+        rulesEl.innerHTML = `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">Forward ${bt.horizon_days}d edge by rule (baseline ${bt.baseline.avg_return_pct}%)</div>
+            <table class="indicator-table"><thead><tr><th>Rule</th><th>Avg</th><th>Win%</th><th>Edge</th><th>n</th></tr></thead><tbody>
+            ${rules.map(r => `<tr>
+                <td style="color:var(--text-secondary)">${r.rule}</td>
+                <td style="color:${r.avg_return_pct >= 0 ? 'var(--green)' : 'var(--red)'}">${r.avg_return_pct >= 0 ? '+' : ''}${r.avg_return_pct}%</td>
+                <td>${r.win_rate}%</td>
+                <td style="color:${r.edge_vs_baseline_pct >= 0 ? 'var(--green)' : 'var(--red)'}">${r.edge_vs_baseline_pct >= 0 ? '+' : ''}${r.edge_vs_baseline_pct}%</td>
+                <td style="color:var(--text-muted)">${r.samples}</td>
+            </tr>`).join('')}
+            </tbody></table>`;
+    }
+}
+
+function renderEquityCurve(curve) {
+    const container = document.getElementById('equity-chart');
+    container.innerHTML = '';
+    if (!curve.length || typeof LightweightCharts === 'undefined') return;
+
+    const c = LightweightCharts.createChart(container, {
+        width: container.clientWidth, height: 160,
+        layout: { background: { type: 'solid', color: '#111113' }, textColor: '#8B8B8E', fontSize: 10 },
+        grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
+        timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: false },
+        rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
+        handleScroll: false, handleScale: false,
+    });
+    const strat = c.addLineSeries({ color: '#5B5BD6', lineWidth: 2, title: 'Strategy' });
+    const bh = c.addLineSeries({ color: '#8B8B8E', lineWidth: 1, lineStyle: 2, title: 'Buy&Hold' });
+    strat.setData(curve.map(p => ({ time: p.t, value: p.strat })));
+    bh.setData(curve.map(p => ({ time: p.t, value: p.bh })));
+    c.timeScale().fitContent();
+    new ResizeObserver(() => c.applyOptions({ width: container.clientWidth })).observe(container);
+}
+
+// ═══════════════════════════════════════
+// EVENT RISK + CHECKLIST
+// ═══════════════════════════════════════
+function renderEvents() {
+    const sc = DATA.scenario || {};
+    const calEl = document.getElementById('event-calendar');
+    const checkEl = document.getElementById('risk-checklist');
+
+    const events = sc.events || [];
+    calEl.innerHTML = `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:5px;">Upcoming High-Impact Events</div>` +
+        events.map(e => {
+            const impactCls = 'impact-' + (e.impact || '').toLowerCase().replace(/\s/g, '');
+            return `<div class="event-item ${e.imminent ? 'imminent' : ''}">
+                <span class="event-days">${e.days_until}d</span>
+                <span class="event-name">${e.event}<br><span class="event-note">${e.date_label} · ${e.note}</span></span>
+                <span class="event-impact ${impactCls}">${e.impact}</span>
+            </div>`;
+        }).join('');
+
+    const checks = sc.checklist || [];
+    checkEl.innerHTML = `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin:8px 0 5px;">Pre-Session Checklist</div>` +
+        checks.map(c => `<div class="check-item check-${c.status}">
+            <span class="check-icon">${c.status === 'ok' ? '✓' : '⚠'}</span>
+            <span>${c.text}</span></div>`).join('');
+}
+
+// ═══════════════════════════════════════
+// SCENARIOS + GOLD IN FX
+// ═══════════════════════════════════════
+function renderScenarios() {
+    const sc = DATA.scenario || {};
+    const fxEl = document.getElementById('gold-in-fx');
+    const scenEl = document.getElementById('macro-scenarios');
+
+    const fx = sc.gold_in_fx || [];
+    if (fx.length) {
+        fxEl.innerHTML = `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:5px;">Gold Priced In</div>
+            <div class="fx-grid">${fx.map(f => `
+                <div class="fx-cell"><div class="fx-cur">${f.currency}</div>
+                <div class="fx-val">${f.symbol}${Number(f.price).toLocaleString()}</div></div>`).join('')}</div>`;
+    }
+
+    const sens = sc.sensitivities || {};
+    const scenarios = sens.scenarios || [];
+    if (scenarios.length) {
+        let html = `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin:4px 0 5px;">Macro Sensitivity (last 60d betas)</div>`;
+        html += scenarios.map(s => {
+            const c = s.gold_pct >= 0 ? 'var(--green)' : 'var(--red)';
+            return `<div class="scenario-item">
+                <span class="scenario-driver">${s.driver}</span>
+                <span class="scenario-impact" style="color:${c}">${s.gold_pct >= 0 ? '+' : ''}${s.gold_pct}%${s.gold_price ? ' → $' + s.gold_price.toFixed(0) : ''}</span>
+            </div>`;
+        }).join('');
+        if (sens.dxy_beta != null) {
+            html += `<div style="font-size:0.6rem; color:var(--text-muted); margin-top:4px;">DXY β: ${sens.dxy_beta} · 10Y yield β: ${sens.yield_beta ?? 'N/A'}</div>`;
+        }
+        scenEl.innerHTML = html;
+    }
+}
+
+// ═══════════════════════════════════════
+// TOOLBAR (refresh / export / auto)
+// ═══════════════════════════════════════
+let autoRefreshTimer = null;
+function setupToolbar() {
+    const refreshBtn = document.getElementById('refresh-btn');
+    const printBtn = document.getElementById('print-btn');
+    const autoToggle = document.getElementById('autorefresh-toggle');
+
+    if (refreshBtn) refreshBtn.onclick = () => loadData();
+    if (printBtn) printBtn.onclick = () => window.print();
+    if (autoToggle) {
+        autoToggle.onchange = () => {
+            if (autoToggle.checked) {
+                autoRefreshTimer = setInterval(loadData, 60000);
+            } else {
+                clearInterval(autoRefreshTimer);
+            }
+        };
+    }
 }
 
 // ═══════════════════════════════════════

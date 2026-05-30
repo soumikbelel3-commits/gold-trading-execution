@@ -21,17 +21,21 @@ class GoldSignalGenerator:
     Output: Signal strength (-1 to +1), confidence (0 to 1), regime label
     """
     
+    # Base weights when no ML is available
     WEIGHTS = {
-        "technical": 0.30,
-        "macro": 0.25,
-        "sentiment": 0.15,
-        "volatility": 0.15,
-        "correlation": 0.15,
+        "technical": 0.28,
+        "macro": 0.22,
+        "sentiment": 0.12,
+        "volatility": 0.10,
+        "correlation": 0.13,
+        "ml": 0.10,
+        "seasonality": 0.05,
     }
-    
+
     def generate(self, technical: dict, macro: dict, sentiment: dict,
                  volatility: dict, correlation: dict,
-                 pipeline_signals: dict = None) -> dict:
+                 pipeline_signals: dict = None,
+                 ml: dict = None, seasonality: dict = None) -> dict:
         """
         Generate composite signal from all analysis results.
         
@@ -101,8 +105,30 @@ class GoldSignalGenerator:
             "regime": correlation.get("regime", "Mixed"),
             "weight": self.WEIGHTS["correlation"],
         }
-        
-        # ── Composite Signal ──
+
+        # ── ML Score → prob_up centered to [-1, +1] ──
+        if ml and ml.get("available") and ml.get("prediction"):
+            prob_up = ml["prediction"].get("prob_up", 50)
+            ml_normalized = np.clip((prob_up - 50) / 50, -1, 1)
+            breakdown["ml"] = {
+                "raw": prob_up,
+                "normalized": round(float(ml_normalized), 4),
+                "regime": f"{ml['prediction'].get('direction', '?')} {prob_up}%",
+                "weight": self.WEIGHTS["ml"],
+            }
+
+        # ── Seasonality Score ──
+        if seasonality and seasonality.get("seasonal_score") is not None:
+            seas = seasonality.get("seasonal_score", 0)
+            seas_normalized = np.clip(seas, -1, 1)
+            breakdown["seasonality"] = {
+                "raw": seas,
+                "normalized": round(float(seas_normalized), 4),
+                "regime": (seasonality.get("current_month") or {}).get("month", "N/A"),
+                "weight": self.WEIGHTS["seasonality"],
+            }
+
+        # ── Composite Signal (weights renormalized over present components) ──
         weighted_sum = 0
         total_weight = 0
         for key, weight in self.WEIGHTS.items():
