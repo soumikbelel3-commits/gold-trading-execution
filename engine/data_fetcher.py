@@ -13,6 +13,11 @@ from pathlib import Path
 import warnings
 import json
 
+try:
+    from .asset_config import ASSETS, DEFAULT_ASSET
+except ImportError:  # allow running as a top-level module
+    from asset_config import ASSETS, DEFAULT_ASSET
+
 warnings.filterwarnings("ignore")
 
 # Path to existing data collection pipeline
@@ -22,20 +27,31 @@ SENTIMENT_DIR = DATA_COLLECTION_DIR.parent / "raw" / "sentiment_data"
 
 class GoldDataFetcher:
     """
-    Fetches gold and cross-asset data from multiple sources.
-    
+    Fetches precious-metal and cross-asset data from multiple sources.
+
     Primary: yfinance (live)
     Secondary: Existing parquet files from Data Collection pipeline
+
+    `asset_key` ("gold" or "silver") selects the price ticker, MCX proxy and
+    cross-asset universe via engine.asset_config. Defaults to gold for
+    backward compatibility.
     """
-    
-    def __init__(self):
+
+    def __init__(self, asset_key: str = DEFAULT_ASSET):
+        self.asset_key = asset_key
+        self.asset_cfg = ASSETS.get(asset_key, ASSETS[DEFAULT_ASSET])
+        self.ticker = self.asset_cfg["ticker"]
+
         self.end_date = datetime.now()
         self.start_1y = self.end_date - timedelta(days=365)
         self.start_6m = self.end_date - timedelta(days=180)
         self.start_3m = self.end_date - timedelta(days=90)
         self.start_1m = self.end_date - timedelta(days=30)
-        
-        # Cross-asset universe
+
+        # Cross-asset universe. The "other metal" (silver for gold, gold for
+        # silver) is included so the gold/silver ratio + correlation panel work
+        # for whichever metal is being analyzed.
+        other = self.asset_cfg["other_metal"]
         self.cross_assets = {
             "DXY": "DX-Y.NYB",
             "US10Y": "^TNX",
@@ -43,10 +59,10 @@ class GoldDataFetcher:
             "SPY": "SPY",
             "TLT": "TLT",
             "CrudeOil": "CL=F",
-            "Silver": "SI=F",
+            other["key"]: other["ticker"],
             "BTC": "BTC-USD",
             "VIX": "^VIX",
-            "GLD_ETF": "GLD",
+            f"{self.asset_cfg['etf']}_ETF": self.asset_cfg["etf"],
         }
     
     def fetch_gold_multi_timeframe(self) -> dict:
@@ -58,7 +74,7 @@ class GoldDataFetcher:
         
         # Daily — 1 year
         try:
-            daily = yf.download("GC=F", start=self.start_1y, end=self.end_date, 
+            daily = yf.download(self.ticker, start=self.start_1y, end=self.end_date,
                                interval="1d", progress=False)
             if isinstance(daily.columns, pd.MultiIndex):
                 daily.columns = daily.columns.get_level_values(0)
@@ -69,7 +85,7 @@ class GoldDataFetcher:
         
         # 1-Hour — 60 days (yfinance limit for 1h)
         try:
-            h1 = yf.download("GC=F", period="60d", interval="1h", progress=False)
+            h1 = yf.download(self.ticker, period="60d", interval="1h", progress=False)
             if isinstance(h1.columns, pd.MultiIndex):
                 h1.columns = h1.columns.get_level_values(0)
             result["1h"] = h1
@@ -99,7 +115,7 @@ class GoldDataFetcher:
         many years of samples rather than a single year.
         """
         try:
-            hist = yf.download("GC=F", period="max", interval="1d", progress=False)
+            hist = yf.download(self.ticker, period="max", interval="1d", progress=False)
             if isinstance(hist.columns, pd.MultiIndex):
                 hist.columns = hist.columns.get_level_values(0)
             # Keep at most ~15 years to bound compute
@@ -108,6 +124,21 @@ class GoldDataFetcher:
             return hist
         except Exception as e:
             print(f"  WARNING: Long-history gold data error: {e}")
+            return pd.DataFrame()
+
+    def fetch_chart_history(self) -> pd.DataFrame:
+        """
+        Full available daily history (UNCAPPED) for the long-range price chart.
+        yfinance typically serves GC=F / SI=F from ~2000 onward (~25 years).
+        Resampled to weekly candles downstream so the payload stays small.
+        """
+        try:
+            hist = yf.download(self.ticker, period="max", interval="1d", progress=False)
+            if isinstance(hist.columns, pd.MultiIndex):
+                hist.columns = hist.columns.get_level_values(0)
+            return hist
+        except Exception as e:
+            print(f"  WARNING: Chart history error: {e}")
             return pd.DataFrame()
 
     def fetch_fx_rates(self) -> dict:
@@ -130,21 +161,25 @@ class GoldDataFetcher:
 
     def fetch_mcx_gold(self) -> dict:
         """
-        Fetch MCX Gold data (INR-denominated gold futures proxy).
-        Uses GOLDBEES.NS (Gold ETF on NSE) as proxy for MCX Gold.
-        Also fetches USD/INR for conversion context.
+        Fetch MCX (INR-denominated) data for the active metal.
+        Uses the NSE ETF proxy from the asset config (GOLDBEES.NS for gold,
+        SILVERBEES.NS for silver). Also fetches USD/INR for conversion context.
+        The Indian ETF dataframe is stored under the "goldbees" key for
+        backward compatibility with the downstream engines.
         """
         mcx_data = {}
-        
-        # GOLDBEES — Indian gold ETF (proxy for MCX Gold Mini)
+        proxy_ticker = self.asset_cfg["mcx"]["proxy_ticker"]
+        proxy_label = self.asset_cfg["mcx"]["proxy_label"]
+
+        # NSE ETF proxy (GOLDBEES / SILVERBEES) for the MCX Mini contract
         try:
-            goldbees = yf.download("GOLDBEES.NS", start=self.start_6m, 
+            goldbees = yf.download(proxy_ticker, start=self.start_6m,
                                   end=self.end_date, interval="1d", progress=False)
             if isinstance(goldbees.columns, pd.MultiIndex):
                 goldbees.columns = goldbees.columns.get_level_values(0)
             mcx_data["goldbees"] = goldbees
         except Exception as e:
-            print(f"  ⚠ GOLDBEES data error: {e}")
+            print(f"  WARNING: {proxy_label} data error: {e}")
             mcx_data["goldbees"] = pd.DataFrame()
         
         # USD/INR exchange rate
@@ -318,20 +353,24 @@ class GoldDataFetcher:
         """
         Master fetch — get all data needed for pre-session analysis.
         """
-        print("[DATA] Fetching data...")
-        
+        name = self.asset_cfg["name"]
+        print(f"[DATA] Fetching {name} data...")
+
         data = {}
-        
-        print("  > Gold multi-timeframe (1H, 4H, Daily)...")
+
+        print(f"  > {name} multi-timeframe (1H, 4H, Daily)...")
         data["gold"] = self.fetch_gold_multi_timeframe()
 
-        print("  > Gold long history (ML / seasonality / backtest)...")
+        print(f"  > {name} long history (ML / seasonality / backtest)...")
         data["gold_long"] = self.fetch_gold_long_history()
 
-        print("  > FX rates (gold in EUR / JPY / GBP)...")
+        print(f"  > {name} full chart history (max, for long-range chart)...")
+        data["gold_chart"] = self.fetch_chart_history()
+
+        print(f"  > FX rates ({name} in EUR / JPY / GBP)...")
         data["fx"] = self.fetch_fx_rates()
 
-        print("  > MCX Gold / India data...")
+        print(f"  > {self.asset_cfg['mcx']['name']} / India data...")
         data["mcx"] = self.fetch_mcx_gold()
         
         print("  > Cross-asset universe...")

@@ -19,11 +19,13 @@ class GoldStructureEngine:
     """
 
     def __init__(self, gold_daily: pd.DataFrame, gold_1h: pd.DataFrame,
-                 technical: dict, cross_assets: dict = None):
+                 technical: dict, cross_assets: dict = None,
+                 asset_cfg: dict = None):
         self.daily = gold_daily if gold_daily is not None else pd.DataFrame()
         self.h1 = gold_1h if gold_1h is not None else pd.DataFrame()
         self.tech = technical or {}
         self.cross = cross_assets or {}
+        self.asset_cfg = asset_cfg or {}
 
     def analyze(self) -> dict:
         return {
@@ -248,16 +250,26 @@ class GoldStructureEngine:
 
     # ──────────────────────────────────────────────
     def _gold_silver_ratio(self) -> dict:
-        silver = self.cross.get("Silver")
-        gold_price = self.tech.get("current_price")
-        if silver is None or (hasattr(silver, "empty") and silver.empty) or not gold_price:
+        # Works whichever metal is the traded asset: the traded metal's price
+        # comes from `current_price`, the counter-metal from cross-assets.
+        cur = self.tech.get("current_price")
+        if not cur:
+            return {}
+        asset_key = self.asset_cfg.get("key", "gold")
+        other_key = self.asset_cfg.get("other_metal", {}).get("key", "Silver")
+        other = self.cross.get(other_key)
+        if other is None or (hasattr(other, "empty") and other.empty):
             return {}
         try:
-            sclose = silver["Close"].squeeze() if isinstance(silver["Close"], pd.DataFrame) else silver["Close"]
-            sclose = sclose.dropna()
-            silver_price = float(sclose.iloc[-1])
-            if silver_price <= 0:
+            oclose = other["Close"].squeeze() if isinstance(other["Close"], pd.DataFrame) else other["Close"]
+            other_price = float(oclose.dropna().iloc[-1])
+            if other_price <= 0:
                 return {}
+            # Always report the conventional Gold/Silver ratio.
+            if asset_key == "silver":
+                gold_price, silver_price = other_price, cur
+            else:
+                gold_price, silver_price = cur, other_price
             ratio = gold_price / silver_price
             # Historical ratio context (rough long-run norms)
             if ratio > 90:
@@ -268,12 +280,9 @@ class GoldStructureEngine:
                 regime = "Normal range"
             else:
                 regime = "Low — silver favored / risk-on metals"
-            # 90-day average for context
-            avg90 = None
-            if not silver.empty and gold_price:
-                pass
             return {
                 "ratio": round(ratio, 1),
+                "gold_price": round(gold_price, 2),
                 "silver_price": round(silver_price, 2),
                 "regime": regime,
             }

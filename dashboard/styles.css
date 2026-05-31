@@ -1173,3 +1173,35 @@ body {
     .grid { display: block !important; }
     .card { margin-bottom: 12px; }
 }
+
+/* ── Asset (Gold / Silver) Toggle ── */
+.asset-toggle {
+    display: inline-flex;
+    margin-left: 8px;
+    padding: 3px;
+    gap: 3px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.asset-btn {
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xs);
+    padding: 4px 12px;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+.asset-btn:hover { color: var(--text-primary); background: var(--gold-subtle); }
+.asset-btn.active {
+    color: var(--text-highlight);
+    background: var(--gold);
+    border-color: var(--border-gold);
+    box-shadow: var(--shadow-gold);
+}

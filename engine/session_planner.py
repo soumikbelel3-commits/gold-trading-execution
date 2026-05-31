@@ -8,6 +8,11 @@
 import numpy as np
 from datetime import datetime, timezone, timedelta
 
+try:
+    from .asset_config import ASSETS, DEFAULT_ASSET
+except ImportError:  # allow running as a top-level module
+    from asset_config import ASSETS, DEFAULT_ASSET
+
 
 class GoldSessionPlanner:
     """
@@ -58,12 +63,15 @@ class GoldSessionPlanner:
     }
     
     def __init__(self, technical: dict, macro: dict, volatility: dict,
-                 composite_signal: dict, mcx_data: dict = None):
+                 composite_signal: dict, mcx_data: dict = None,
+                 asset_cfg: dict = None):
         self.technical = technical
         self.macro = macro
         self.volatility = volatility
         self.signal = composite_signal
         self.mcx_data = mcx_data or {}
+        self.asset_cfg = asset_cfg or ASSETS[DEFAULT_ASSET]
+        self.metal = self.asset_cfg["name"]
     
     def plan(self) -> dict:
         """Generate complete session gameplan."""
@@ -191,24 +199,35 @@ class GoldSessionPlanner:
         return plan
     
     def _build_mcx_plan(self) -> dict:
-        """Build MCX Gold specific gameplan."""
+        """Build MCX (India) gameplan for the active metal."""
+        mcx_cfg = self.asset_cfg["mcx"]
+        unit_label = mcx_cfg["unit_label"]
+        unit_grams = mcx_cfg["unit_grams"]
+        metal = self.metal
+
         mcx_plan = {
-            "session_times": "09:00 AM – 11:30 PM IST",
-            "contract": "MCX Gold (1 kg) / Gold Mini (100g) / Gold Petal (1g)",
+            "mcx_name": mcx_cfg["name"],
+            "session_times": mcx_cfg["session_times"],
+            "contract": mcx_cfg["contract"],
+            "proxy_label": mcx_cfg["proxy_label"],
+            "mcx_unit_label": unit_label,
             "usdinr_rate": self.mcx_data.get("usdinr_rate", 85.0),
         }
-        
-        # Calculate MCX Gold equivalent
+
+        # Calculate the MCX rupee equivalent for the quoted unit.
+        # ₹/unit = (COMEX $/troy oz × USDINR) / 31.1035 g/oz × grams-in-unit
         current_price = self.technical.get("current_price")
         usdinr = self.mcx_data.get("usdinr_rate", 85.0)
-        
+
         if current_price:
-            # MCX Gold per 10 grams = (COMEX per troy oz * USDINR) / 31.1035 * 10
-            mcx_per_10g = (current_price * usdinr) / 31.1035 * 10
-            mcx_plan["mcx_gold_equivalent"] = round(mcx_per_10g, 0)
-            mcx_plan["conversion_note"] = f"COMEX ${current_price:.0f}/oz × ₹{usdinr:.1f}/$ = ₹{mcx_per_10g:,.0f}/10g"
-        
-        # GOLDBEES stats
+            mcx_per_unit = (current_price * usdinr) / 31.1035 * unit_grams
+            mcx_plan["mcx_gold_equivalent"] = round(mcx_per_unit, 0)
+            mcx_plan["conversion_note"] = (
+                f"COMEX ${current_price:.2f}/oz x Rs.{usdinr:.1f}/$ "
+                f"= Rs.{mcx_per_unit:,.0f}/{unit_label}"
+            )
+
+        # NSE ETF proxy stats (GOLDBEES / SILVERBEES)
         goldbees = self.mcx_data.get("goldbees", None)
         if goldbees is not None and hasattr(goldbees, 'empty') and not goldbees.empty:
             try:
@@ -220,23 +239,18 @@ class GoldSessionPlanner:
                     mcx_plan["goldbees_change_pct"] = round((curr - prev) / prev * 100, 2)
             except:
                 pass
-        
+
         # India market specifics
         signal_val = self.signal.get("signal", 0)
         if signal_val > 0.15:
-            mcx_plan["india_bias"] = "Bullish — INR weakness adds to gold upside in ₹ terms"
+            mcx_plan["india_bias"] = f"Bullish - INR weakness adds to {metal.lower()} upside in Rs. terms"
         elif signal_val < -0.15:
-            mcx_plan["india_bias"] = "Bearish — watch for INR strength amplifying gold downside"
+            mcx_plan["india_bias"] = f"Bearish - watch for INR strength amplifying {metal.lower()} downside"
         else:
-            mcx_plan["india_bias"] = "Neutral — monitor USDINR for direction"
-        
-        mcx_plan["key_factors"] = [
-            "RBI policy stance and USDINR intervention",
-            "Physical gold demand (wedding/festival season)",
-            "Import duty changes (currently ~15%)",
-            "Sovereign Gold Bond issuance calendar",
-        ]
-        
+            mcx_plan["india_bias"] = "Neutral - monitor USDINR for direction"
+
+        mcx_plan["key_factors"] = list(mcx_cfg["key_factors"])
+
         return mcx_plan
     
     def _compute_risk_params(self) -> dict:
@@ -262,31 +276,33 @@ class GoldSessionPlanner:
         risk["target_2r"] = round(atr * 2.0, 2)        # 1:2 R:R
         risk["target_3r"] = round(atr * 3.0, 2)        # 1:3 R:R
         
-        # Position sizing examples (for $100k account, 1% risk per trade)
+        # Position sizing examples — uses the active metal's COMEX point values
+        # ($ P&L per $1.00 move): micro vs standard contract size.
+        futures = self.asset_cfg["futures"]
+        micro_pv = futures["micro_point_value"]
+        standard_pv = futures["standard_point_value"]
+        risk["micro_label"] = futures["micro_label"]
         for account_size in [10000, 50000, 100000]:
             risk_per_trade = account_size * 0.01  # 1% risk
-            contracts_gold_micro = risk_per_trade / (atr * 10)  # Micro gold = $10/point
-            contracts_gold_standard = risk_per_trade / (atr * 100)  # Standard = $100/point
-            
+            contracts_micro = risk_per_trade / (atr * micro_pv)
+            contracts_standard = risk_per_trade / (atr * standard_pv)
+
             risk[f"sizing_{account_size}"] = {
                 "account_size": account_size,
                 "risk_per_trade_1pct": round(risk_per_trade, 2),
-                "micro_gold_contracts": round(contracts_gold_micro, 2),
-                "standard_gold_contracts": round(contracts_gold_standard, 2),
+                "micro_gold_contracts": round(contracts_micro, 2),
+                "standard_gold_contracts": round(contracts_standard, 2),
             }
-        
+
         # MCX position sizing
-        usdinr = self.mcx_data.get("usdinr_rate", 85.0)
-        mcx_lot_size = 100  # Gold Mini = 100 grams
-        mcx_tick = 1  # ₹1 per gram
-        mcx_tick_value = mcx_lot_size * mcx_tick  # ₹100 per tick
-        
+        mcx_cfg = self.asset_cfg["mcx"]
         risk["mcx_sizing"] = {
-            "lot_size_mini": f"{mcx_lot_size}g (Gold Mini)",
-            "tick_value": f"₹{mcx_tick_value}",
+            "mcx_name": mcx_cfg["name"],
+            "lot_size_mini": mcx_cfg["lot_label"],
+            "tick_value": mcx_cfg["tick_value"],
             "note": "Always check MCX margin requirements before trading"
         }
-        
+
         return risk
     
     def _generate_trade_setups(self) -> list:

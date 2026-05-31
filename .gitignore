@@ -25,6 +25,11 @@ Thumbs.db
 # Session output (regenerated on each run)
 output/session_data.json
 dashboard/session_data.json
+output/session_data_silver.json
+dashboard/session_data_silver.json
+
+# Claude Code runtime artifacts
+.claude/scheduled_tasks.lock
 
 # Gemini/Antigravity artifacts
 implementation_plan.md

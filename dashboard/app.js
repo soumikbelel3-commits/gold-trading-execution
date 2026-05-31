@@ -9,23 +9,35 @@ let DATA = null;
 let chart = null;
 let candleSeries = null;
 
+// ── Asset (metal) selection ──
+const ASSET_FILES = { gold: 'session_data.json', silver: 'session_data_silver.json' };
+let currentAsset = 'gold';
+
+// Name of the active metal, used in dynamically-built labels.
+function metal() { return (DATA && DATA.meta && DATA.meta.asset_name) || 'Gold'; }
+
 // ── Load Data ──
-async function loadData() {
+async function loadData(asset) {
+    if (asset) currentAsset = asset;
+    const file = ASSET_FILES[currentAsset] || ASSET_FILES.gold;
     try {
-        const response = await fetch('session_data.json?t=' + Date.now());
+        const response = await fetch(file + '?t=' + Date.now());
+        if (!response.ok) throw new Error('HTTP ' + response.status);
         DATA = await response.json();
+        if (DATA.meta && DATA.meta.asset) currentAsset = DATA.meta.asset;
         document.getElementById('loading').style.display = 'none';
         document.getElementById('dashboard').style.display = 'block';
         renderAll();
     } catch (error) {
-        document.querySelector('.loading-text').textContent = 
-            'Error loading data. Make sure run_session.py has been executed.';
+        document.querySelector('.loading-text').textContent =
+            'Error loading ' + currentAsset + ' data. Make sure run_session.py has been executed.';
         console.error('Failed to load session data:', error);
     }
 }
 
 // ── Render All Sections ──
 function renderAll() {
+    applyAssetLabels();
     renderHeader();
     renderSignalBar();
     renderChart('daily');
@@ -52,6 +64,50 @@ function renderAll() {
     setupChartTabs();
     setupPivotTabs();
     setupToolbar();
+    setupAssetToggle();
+}
+
+// ═══════════════════════════════════════
+// ASSET-AWARE LABELS + TOGGLE
+// ═══════════════════════════════════════
+function applyAssetLabels() {
+    const m = metal();
+    const meta = (DATA && DATA.meta) || {};
+    const sym = meta.asset_symbol || 'XAU/USD';
+    const logo = meta.asset_logo || 'Au';
+
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+    document.title = `${m} Pre-Session Analysis | ${sym}`;
+    set('hero-logo', logo);
+    set('header-title', `${m} Pre-Session Analysis`);
+    set('header-subtitle', `${sym} & MCX ${m} · Institutional Desk`);
+    set('chart-title', `📈 ${m} Price Chart`);
+    set('mcx-title', `🇮🇳 MCX ${m} — India`);
+    set('scenarios-title', `🌍 Scenarios & ${m} in FX`);
+    set('footer-text',
+        `${m} Pre-Session Analysis Dashboard · Data from yfinance & Quant Research Pipeline · ` +
+        `For educational & research purposes only · Not financial advice`);
+
+    // Reflect active state on the toggle buttons.
+    document.querySelectorAll('#asset-toggle .asset-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.asset === currentAsset);
+    });
+}
+
+let assetToggleWired = false;
+function setupAssetToggle() {
+    if (assetToggleWired) return;           // wire once; survives re-renders
+    const toggle = document.getElementById('asset-toggle');
+    if (!toggle) return;
+    toggle.querySelectorAll('.asset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const asset = btn.dataset.asset;
+            if (asset === currentAsset) return;
+            loadData(asset);
+        });
+    });
+    assetToggleWired = true;
 }
 
 // ═══════════════════════════════════════
@@ -197,10 +253,11 @@ function renderChart(timeframe) {
     });
     
     candleSeries.setData(candles);
-    
-    // Add key level markers
-    addChartLevels(timeframe);
-    
+
+    // Pivot/Fib/SMA overlays are 1-year-scale — only meaningful on the
+    // short-range views, not the multi-decade Max / 30Y charts.
+    if (timeframe === 'daily' || timeframe === '1h') addChartLevels(timeframe);
+
     chart.timeScale().fitContent();
     
     // Resize handler
@@ -419,7 +476,7 @@ function renderMacro() {
     html += `
         <div style="margin-bottom:12px;">
             <div class="flex-between" style="font-size:0.62rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">
-                <span>Bearish Gold</span><span>Macro Tilt</span><span>Bullish Gold</span>
+                <span>Bearish ${metal()}</span><span>Macro Tilt</span><span>Bullish ${metal()}</span>
             </div>
             <div style="position:relative; height:10px; background:linear-gradient(90deg, var(--red), var(--bg-elevated), var(--green)); border-radius:6px;">
                 <div style="position:absolute; top:-3px; left:${tiltPct}%; transform:translateX(-50%); width:4px; height:16px; background:var(--text-highlight); border-radius:2px; box-shadow:0 0 6px rgba(0,0,0,0.6);"></div>
@@ -506,7 +563,7 @@ function renderSentiment() {
                     </div>
                 </div>
             </div>
-            <div style="font-size:0.65rem; color:var(--text-muted); margin-left:112px; margin-bottom:8px;">${ns.article_count || 0} gold-related articles analyzed</div>
+            <div style="font-size:0.65rem; color:var(--text-muted); margin-left:112px; margin-bottom:8px;">${ns.article_count || 0} market news articles analyzed</div>
         `;
     }
     
@@ -530,7 +587,7 @@ function renderSentiment() {
     const headlines = ns.headlines || [];
     if (headlines.length > 0) {
         headlinesContainer.innerHTML = `
-            <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Gold-Related Headlines</div>
+            <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">Market Headlines</div>
             ${headlines.map(h => {
                 const sc = h.sentiment || 0;
                 const borderColor = sc > 0.1 ? 'var(--green)' : sc < -0.1 ? 'var(--red)' : 'var(--amber)';
@@ -810,11 +867,11 @@ function renderMCX() {
     
     let html = '';
     
-    // MCX Gold equivalent
+    // MCX equivalent (per quoted unit: 10g for gold, kg for silver)
     if (mcx.mcx_gold_equivalent) {
         html += `
             <div class="mcx-highlight">
-                <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">MCX Gold Equivalent (per 10g)</div>
+                <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">MCX ${metal()} Equivalent (per ${mcx.mcx_unit_label || '10g'})</div>
                 <div class="mcx-price">₹${Number(mcx.mcx_gold_equivalent).toLocaleString('en-IN')}</div>
                 <div class="mcx-conversion">${mcx.conversion_note || ''}</div>
             </div>
@@ -830,11 +887,11 @@ function renderMCX() {
             </div>
     `;
     
-    // GOLDBEES
+    // NSE ETF proxy (GOLDBEES / SILVERBEES)
     if (mcx.goldbees_price) {
         html += `
             <div class="risk-item" style="flex:1;">
-                <div class="label">GOLDBEES</div>
+                <div class="label">${mcx.proxy_label || 'GOLDBEES'}</div>
                 <div class="value">₹${mcx.goldbees_price?.toFixed(2)}</div>
             </div>
         `;
@@ -1007,7 +1064,7 @@ function renderRiskParams() {
     const sizes = [10000, 50000, 100000];
     html += `<div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">Position Sizing (1% Risk)</div>`;
     
-    html += '<table class="indicator-table"><thead><tr><th>Account</th><th>Risk/Trade</th><th>Micro Gold</th><th>Standard</th></tr></thead><tbody>';
+    html += `<table class="indicator-table"><thead><tr><th>Account</th><th>Risk/Trade</th><th>${risk.micro_label || ('Micro ' + metal())}</th><th>Standard</th></tr></thead><tbody>`;
     
     sizes.forEach(size => {
         const s = risk[`sizing_${size}`];
@@ -1028,7 +1085,7 @@ function renderRiskParams() {
     if (risk.mcx_sizing) {
         html += `
             <div style="margin-top:12px; padding:8px 10px; background:var(--bg-elevated); border-radius:var(--radius-xs); border-left:3px solid var(--gold);">
-                <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">🇮🇳 MCX Gold</div>
+                <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">🇮🇳 ${risk.mcx_sizing.mcx_name || ('MCX ' + metal())}</div>
                 <div style="font-size:0.7rem; color:var(--text-secondary);">
                     Lot: ${risk.mcx_sizing.lot_size_mini} · Tick Value: ${risk.mcx_sizing.tick_value}
                 </div>
@@ -1468,7 +1525,7 @@ function renderScenarios() {
 
     const fx = sc.gold_in_fx || [];
     if (fx.length) {
-        fxEl.innerHTML = `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:5px;">Gold Priced In</div>
+        fxEl.innerHTML = `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:5px;">${metal()} Priced In</div>
             <div class="fx-grid">${fx.map(f => `
                 <div class="fx-cell"><div class="fx-cur">${f.currency}</div>
                 <div class="fx-val">${f.symbol}${Number(f.price).toLocaleString()}</div></div>`).join('')}</div>`;

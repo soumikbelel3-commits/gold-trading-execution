@@ -73,8 +73,8 @@ class GoldTechnicalAnalyzer:
             result["pivot_points"] = self._compute_pivot_points(daily_df)
             result["ichimoku"] = self._compute_ichimoku(daily_df)
             
-            # Candlestick data for charting (last 120 candles)
-            result["candlestick_data"]["daily"] = self._format_candles(daily_df, 120)
+            # Candlestick data for charting (full ~1 year of daily candles)
+            result["candlestick_data"]["daily"] = self._format_candles(daily_df, 260)
         
         h1_df = self.data.get("1h", pd.DataFrame())
         if not h1_df.empty:
