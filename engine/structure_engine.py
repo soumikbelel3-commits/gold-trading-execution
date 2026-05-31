@@ -250,6 +250,9 @@ class GoldStructureEngine:
 
     # ──────────────────────────────────────────────
     def _gold_silver_ratio(self) -> dict:
+        # Not applicable to crypto — only computed for precious metals.
+        if self.asset_cfg.get("asset_class", "metal") != "metal":
+            return {}
         # Works whichever metal is the traded asset: the traded metal's price
         # comes from `current_price`, the counter-metal from cross-assets.
         cur = self.tech.get("current_price")

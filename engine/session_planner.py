@@ -62,6 +62,21 @@ class GoldSessionPlanner:
         },
     }
     
+    # Crypto trades 24/7 — no Asian/London/NY handoff or daily settlement.
+    CRYPTO_SESSIONS = {
+        "24/7 Global Market": {
+            "start_utc": 0,
+            "end_utc": 24,
+            "characteristics": [
+                "Trades 24/7/365 — no exchange open/close or daily settlement",
+                "Liquidity peaks during US/EU overlap (~13:00-16:00 UTC)",
+                "Asia hours can drive overnight moves; weekends stay live",
+                "Key catalysts: US macro prints, ETF flows, on-chain/regulatory news",
+            ],
+            "volatility_rank": "High (24/7)",
+        },
+    }
+
     def __init__(self, technical: dict, macro: dict, volatility: dict,
                  composite_signal: dict, mcx_data: dict = None,
                  asset_cfg: dict = None):
@@ -72,31 +87,35 @@ class GoldSessionPlanner:
         self.mcx_data = mcx_data or {}
         self.asset_cfg = asset_cfg or ASSETS[DEFAULT_ASSET]
         self.metal = self.asset_cfg["name"]
+        self.asset_class = self.asset_cfg.get("asset_class", "metal")
     
     def plan(self) -> dict:
         """Generate complete session gameplan."""
         now_utc = datetime.now(timezone.utc)
         current_hour = now_utc.hour + now_utc.minute / 60
-        
+
+        is_crypto = self.asset_class == "crypto"
+        sessions_map = self.CRYPTO_SESSIONS if is_crypto else self.SESSIONS
+
         result = {
             "current_time_utc": now_utc.strftime("%Y-%m-%d %H:%M UTC"),
             "current_time_ist": (now_utc + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d %H:%M IST"),
-            "active_session": self._get_active_session(current_hour),
-            "next_session": self._get_next_session(current_hour),
+            "active_session": "24/7 Global Market" if is_crypto else self._get_active_session(current_hour),
+            "next_session": {"name": "Always open (24/7)", "hours_until": 0} if is_crypto else self._get_next_session(current_hour),
             "sessions": {},
             "mcx_gameplan": {},
             "risk_parameters": {},
             "trade_setups": [],
         }
-        
+
         # Build gameplan for each session
-        for session_name, session_info in self.SESSIONS.items():
+        for session_name, session_info in sessions_map.items():
             result["sessions"][session_name] = self._build_session_plan(
                 session_name, session_info
             )
-        
-        # MCX-specific gameplan
-        result["mcx_gameplan"] = self._build_mcx_plan()
+
+        # MCX-specific gameplan (precious metals only)
+        result["mcx_gameplan"] = {} if is_crypto else self._build_mcx_plan()
         
         # Risk parameters
         result["risk_parameters"] = self._compute_risk_params()
@@ -144,7 +163,18 @@ class GoldSessionPlanner:
         current_price = self.technical.get("current_price", 0)
         
         # Session-specific bias
-        if name == "Asian / MCX":
+        if name == "24/7 Global Market":
+            if signal_val > 0.2:
+                plan["bias"] = "Bullish bias — buy dips"
+                plan["strategy"] = "Accumulate on pullbacks to support; momentum favors longs"
+            elif signal_val < -0.2:
+                plan["bias"] = "Bearish bias — sell rallies"
+                plan["strategy"] = "Fade strength into resistance; momentum favors shorts"
+            else:
+                plan["bias"] = "Range / chop"
+                plan["strategy"] = "Trade defined S/R; wait for a volume breakout before committing"
+
+        elif name == "Asian / MCX":
             # Asian tends to be range-bound
             if abs(signal_val) > 0.3:
                 plan["bias"] = "Follow overnight momentum"
@@ -294,14 +324,15 @@ class GoldSessionPlanner:
                 "standard_gold_contracts": round(contracts_standard, 2),
             }
 
-        # MCX position sizing
-        mcx_cfg = self.asset_cfg["mcx"]
-        risk["mcx_sizing"] = {
-            "mcx_name": mcx_cfg["name"],
-            "lot_size_mini": mcx_cfg["lot_label"],
-            "tick_value": mcx_cfg["tick_value"],
-            "note": "Always check MCX margin requirements before trading"
-        }
+        # MCX position sizing (precious metals only)
+        if self.asset_class != "crypto":
+            mcx_cfg = self.asset_cfg["mcx"]
+            risk["mcx_sizing"] = {
+                "mcx_name": mcx_cfg["name"],
+                "lot_size_mini": mcx_cfg["lot_label"],
+                "tick_value": mcx_cfg["tick_value"],
+                "note": "Always check MCX margin requirements before trading"
+            }
 
         return risk
     

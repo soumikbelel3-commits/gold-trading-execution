@@ -18,18 +18,27 @@ class GoldCorrelationEngine:
     ASSET_LABELS = {
         "DXY": "US Dollar (DXY)",
         "US10Y": "10Y Treasury",
+        "US02Y": "2Y Treasury",
         "SPY": "S&P 500 (SPY)",
+        "QQQ": "Nasdaq 100 (QQQ)",
         "TLT": "Long Bonds (TLT)",
         "CrudeOil": "Crude Oil (CL)",
+        "Gold": "Gold (GC)",
         "Silver": "Silver (SI)",
         "BTC": "Bitcoin (BTC)",
+        "ETH": "Ethereum (ETH)",
         "VIX": "VIX",
         "GLD_ETF": "Gold ETF (GLD)",
+        "SLV_ETF": "Silver ETF (SLV)",
     }
-    
-    def __init__(self, gold_daily: pd.DataFrame, cross_assets: dict):
+
+    def __init__(self, gold_daily: pd.DataFrame, cross_assets: dict,
+                 asset_cfg: dict = None):
         self.gold = gold_daily
         self.cross = cross_assets
+        self.asset_cfg = asset_cfg or {}
+        self.asset_class = self.asset_cfg.get("asset_class", "metal")
+        self.name = self.asset_cfg.get("name", "Gold")
     
     def analyze(self) -> dict:
         """Compute cross-asset correlation analysis."""
@@ -136,19 +145,38 @@ class GoldCorrelationEngine:
         """
         dxy_corr = corr_30d.get("DXY", 0)
         spy_corr = corr_30d.get("SPY", 0)
+        qqq_corr = corr_30d.get("QQQ", 0)
         tlt_corr = corr_30d.get("TLT", 0)
         oil_corr = corr_30d.get("CrudeOil", 0)
         silver_corr = corr_30d.get("Silver", 0)
-        
+        btc_corr = corr_30d.get("BTC", 0)
+        name = self.name
+
+        # Crypto is risk-ON — frame the regime around equities/USD, not havens.
+        if self.asset_class == "crypto":
+            equity_corr = max(spy_corr, qqq_corr)
+            if equity_corr > 0.5:
+                return f"Risk-On ({name} tracking equities/Nasdaq)"
+            elif dxy_corr < -0.4:
+                return f"Dollar-Driven ({name} inversely tracking USD)"
+            elif btc_corr > 0.7:
+                return f"Crypto-Correlated ({name} moving with BTC)"
+            elif equity_corr < -0.3:
+                return f"Risk-Off pressure ({name} falling with equities weak)"
+            elif abs(dxy_corr) < 0.15 and abs(equity_corr) < 0.15:
+                return f"Decorrelated ({name} moving independently)"
+            else:
+                return "Mixed Regime"
+
         if dxy_corr < -0.4:
-            return "Dollar-Driven (Gold inversely tracking USD)"
+            return f"Dollar-Driven ({name} inversely tracking USD)"
         elif spy_corr < -0.3 and tlt_corr > 0.3:
-            return "Risk-Off / Safe Haven (Gold benefiting from fear)"
+            return f"Risk-Off / Safe Haven ({name} benefiting from fear)"
         elif oil_corr > 0.4 and dxy_corr < -0.2:
-            return "Inflation Hedge (Gold tracking commodity complex)"
+            return f"Inflation Hedge ({name} tracking commodity complex)"
         elif silver_corr > 0.7:
-            return "Precious Metals Rally (Gold-Silver moving together)"
+            return f"Precious Metals Rally ({name}-Silver moving together)"
         elif abs(dxy_corr) < 0.15 and abs(spy_corr) < 0.15:
-            return "Decorrelated (Gold moving independently)"
+            return f"Decorrelated ({name} moving independently)"
         else:
             return "Mixed Regime"
