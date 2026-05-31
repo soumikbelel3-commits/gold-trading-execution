@@ -27,12 +27,13 @@ class GoldMacroScorer:
     
     def __init__(self, dxy: float = None, vix: float = None,
                  yields: dict = None, cross_assets: dict = None,
-                 metal: str = "Gold"):
+                 metal: str = "Gold", asset_class: str = "metal"):
         self.dxy = dxy
         self.vix = vix
         self.yields = yields or {}
         self.cross_assets = cross_assets or {}
         self.metal = metal
+        self.asset_class = asset_class
     
     def score_all(self) -> dict:
         """Run all macro scores and produce composite."""
@@ -78,6 +79,38 @@ class GoldMacroScorer:
         result["normalized_score"] = round(total / result["max_possible"], 4)
         
         # Regime classification
+        if self.asset_class == "crypto":
+            # Honest framing: this is a USD/rates/risk *financial-conditions*
+            # read, not a metals-style safe-haven call. Easy conditions (weak
+            # USD, low yields, low VIX) are a risk-on tailwind for crypto.
+            if total >= 8:
+                result["regime"] = "Very Easy Conditions — risk-on tailwind"
+            elif total >= 4:
+                result["regime"] = "Easy Conditions — supportive for risk assets"
+            elif total >= 1:
+                result["regime"] = "Mildly Easy Conditions"
+            elif total > -1:
+                result["regime"] = "Neutral Macro Backdrop"
+            elif total > -4:
+                result["regime"] = "Mildly Tight Conditions"
+            elif total > -8:
+                result["regime"] = "Tight Conditions — risk-off headwind"
+            else:
+                result["regime"] = "Very Tight Conditions — strong risk-off headwind"
+
+            # Relabel the remaining gold-worded factor details for crypto.
+            name = self.metal
+
+            def _relabel_c(s):
+                if not isinstance(s, str):
+                    return s
+                return (s.replace("safe-haven bid for gold", f"risk-on backdrop for {name}")
+                         .replace("for gold", f"for {name}")
+                         .replace("gold", name.lower()).replace("Gold", name))
+            for f in result["factors"].values():
+                f["detail"] = _relabel_c(f.get("detail"))
+            return result
+
         if total >= 8:
             result["regime"] = "Strongly Bullish Gold"
         elif total >= 4:
@@ -144,7 +177,23 @@ class GoldMacroScorer:
         """
         if self.vix is None:
             return 0, "No VIX data"
-        
+
+        # Crypto is risk-ON: high VIX (fear/risk-off) is a HEADWIND, the
+        # opposite of gold's safe-haven bid. Flip the sign and the wording.
+        if self.asset_class == "crypto":
+            if self.vix > 35:
+                return -2, f"VIX at {self.vix:.1f} — extreme fear, risk-off hammers crypto"
+            elif self.vix > 28:
+                return -1, f"VIX at {self.vix:.1f} — high fear, risk-off headwind for crypto"
+            elif self.vix > 22:
+                return 0, f"VIX at {self.vix:.1f} — elevated fear, mixed for crypto"
+            elif self.vix > 16:
+                return 0, f"VIX at {self.vix:.1f} — normal volatility, neutral"
+            elif self.vix > 12:
+                return 1, f"VIX at {self.vix:.1f} — low fear, risk-on supports crypto"
+            else:
+                return 2, f"VIX at {self.vix:.1f} — complacency/risk-on, crypto tailwind"
+
         if self.vix > 35:
             return 3, f"VIX at {self.vix:.1f} — extreme fear, strong safe-haven bid for gold"
         elif self.vix > 28:

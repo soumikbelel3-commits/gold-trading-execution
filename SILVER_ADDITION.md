@@ -128,6 +128,61 @@ a true 30-year daily chart isn't possible from this source. A genuine 30y+
 series would require a spot/LBMA history feed (e.g. a paid API or a CSV import)
 wired in as an alternate `fetch_chart_history` source.
 
+## Crypto assets (BTC, ETH, SOL, BNB, XRP)
+
+Extended the multi-asset system to **crypto**, a different asset class from
+precious metals. Added to the toggle: **Bitcoin, Ethereum, Solana, BNB, XRP**.
+
+### Config
+`asset_config.py` now tags every asset with `asset_class` (`metal` / `crypto`).
+Crypto entries (built via the `_crypto()` helper) carry: ticker (`BTC-USD`,
+`ETH-USD`, `SOL-USD`, `BNB-USD`, `XRP-USD`), a `peer` crypto for correlations,
+and spot-unit sizing (point value = $1 per $1 move per coin). `ASSET_ORDER`
+drives the pipeline run order and toggle layout.
+
+### Asset-class–aware engines
+- **data_fetcher** — crypto cross-asset universe is risk-on oriented:
+  `DXY, US10Y, US02Y, SPY, QQQ, Gold, VIX` + BTC/ETH peers. MCX fetch skipped.
+- **macro_scorer** — `asset_class="crypto"` **flips the VIX factor** (fear =
+  risk-off headwind, the opposite of gold's safe-haven bid) and reframes the
+  regime as **financial conditions** ("Easy / Tight"), not a metals-style
+  bull/bear call.
+- **structure_engine** — gold/silver ratio skipped for crypto.
+- **session_planner** — single **24/7 Global Market** session instead of
+  Asian/London/NY; MCX panel and MCX sizing skipped; sizing labeled in coin
+  units.
+- **correlation_engine** — crypto regimes are risk-on framed (Risk-On tracking
+  equities/Nasdaq, Crypto-Correlated with BTC, Dollar-Driven, …); all labels
+  use the active asset name.
+
+### Dashboard
+- 7-asset toggle (Gold · Silver · BTC · ETH · SOL · BNB · XRP).
+- For crypto: the **MCX/India card is hidden** and the Session row collapses to
+  full width; the macro gauge is relabeled **Risk-Off ↔ Risk-On** with a caveat
+  that it's a USD/rates/risk backdrop, not a safe-haven call; chart/title/FX
+  labels follow the active coin. The multi-decade chart works (BTC ~11.7y back
+  to 2014; ETH/BNB/XRP to 2017; SOL to 2020 — each coin's full history).
+
+### Honesty notes for crypto
+- The macro composite still leans on metals-style relationships for some
+  factors (e.g. an inverted yield curve scores risk-positive); only the most
+  inverted factor (VIX) is flipped. Treat the macro panel as USD/rates/risk
+  *context*, per the in-panel caveat.
+- Pipeline sentiment parquet is gold/market-sourced and reused as a generic
+  market-sentiment proxy.
+
+### Verified (live preview, no console errors)
+| Asset | Price | Macro | Correlation regime |
+|-------|-------|-------|--------------------|
+| Bitcoin | $73,836 | Mildly Easy Conditions | Mixed |
+| Ethereum | $2,020 | Mildly Easy Conditions | Crypto-Correlated (with BTC) |
+| Solana | $82.67 | Mildly Easy Conditions | Risk-On (tracking Nasdaq) |
+| BNB | $721.88 | Mildly Easy Conditions | Mixed |
+| XRP | $1.34 | Mildly Easy Conditions | Crypto-Correlated (with BTC) |
+
+MCX card hidden, 24/7 session shown, no gold/silver ratio, macro tilt =
+"Risk-Off / Risk-On" for all crypto tabs.
+
 ## Caveats / future tweaks
 - Pipeline **sentiment** parquet (Fear & Greed / news) is market-wide/gold-
   sourced; it's reused for silver as a market-sentiment proxy and labeled

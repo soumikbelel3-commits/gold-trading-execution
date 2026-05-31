@@ -58,7 +58,7 @@ from engine.backtest_engine import GoldBacktestEngine
 from engine.structure_engine import GoldStructureEngine
 from engine.scenario_engine import GoldScenarioEngine
 from engine.ml_engine import GoldMLEngine
-from engine.asset_config import ASSETS, DEFAULT_ASSET
+from engine.asset_config import ASSETS, DEFAULT_ASSET, ASSET_ORDER
 
 
 # ═══════════════════════════════════════════════════════════
@@ -123,6 +123,7 @@ def run_analysis(asset_key: str = DEFAULT_ASSET) -> dict:
         yields=data.get("yields", {}),
         cross_assets=data.get("cross_assets", {}),
         metal=metal,
+        asset_class=cfg.get("asset_class", "metal"),
     )
     macro = macro_scorer.score_all()
     print(f"  [OK] Macro regime: {macro['regime']}")
@@ -143,7 +144,8 @@ def run_analysis(asset_key: str = DEFAULT_ASSET) -> dict:
     print("[CORR] Computing cross-asset correlations...")
     corr_engine = GoldCorrelationEngine(
         data["gold"].get("daily", __import__('pandas').DataFrame()),
-        data.get("cross_assets", {})
+        data.get("cross_assets", {}),
+        asset_cfg=cfg,
     )
     correlation = corr_engine.analyze()
     print(f"  [OK] Correlation regime: {correlation['regime']}")
@@ -240,6 +242,7 @@ def run_analysis(asset_key: str = DEFAULT_ASSET) -> dict:
             "asset_name": cfg["name"],
             "asset_symbol": cfg["symbol"],
             "asset_logo": cfg["logo"],
+            "asset_class": cfg.get("asset_class", "metal"),
         },
         "technical": technical,
         "macro": macro,
@@ -387,9 +390,9 @@ def serve_dashboard():
 def main():
     """Main entry point."""
     try:
-        # Run the full pipeline for each metal and save its own JSON.
-        # The dashboard's Gold/Silver toggle swaps between these files.
-        for asset_key in ("gold", "silver"):
+        # Run the full pipeline for every configured asset and save its own
+        # JSON. The dashboard's asset toggle swaps between these files.
+        for asset_key in ASSET_ORDER:
             output = run_analysis(asset_key)
             print(f"[SAVE] Saving {ASSETS[asset_key]['name']} results...")
             save_output(output, asset_key)

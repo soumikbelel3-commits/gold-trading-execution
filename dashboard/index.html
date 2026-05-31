@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pre-Session Analysis | Gold & Silver</title>
     <meta name="description" content="Institutional-grade gold & silver trading pre-session analysis dashboard. Technical analysis, macro scoring, sentiment, volatility, and trade setups.">
-    <link rel="stylesheet" href="styles.css?v=5">
+    <link rel="stylesheet" href="styles.css?v=7">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -30,8 +30,13 @@
                             <div class="subtitle" id="header-subtitle">XAU/USD & MCX Gold · Institutional Desk</div>
                         </div>
                         <div class="asset-toggle" id="asset-toggle">
-                            <button class="asset-btn active" data-asset="gold">Au · Gold</button>
-                            <button class="asset-btn" data-asset="silver">Ag · Silver</button>
+                            <button class="asset-btn active" data-asset="gold">Au Gold</button>
+                            <button class="asset-btn" data-asset="silver">Ag Silver</button>
+                            <button class="asset-btn" data-asset="bitcoin">₿ BTC</button>
+                            <button class="asset-btn" data-asset="ethereum">Ξ ETH</button>
+                            <button class="asset-btn" data-asset="solana">◎ SOL</button>
+                            <button class="asset-btn" data-asset="bnb">⬡ BNB</button>
+                            <button class="asset-btn" data-asset="xrp">✕ XRP</button>
                         </div>
                     </div>
                     <div class="price-hero">
@@ -195,7 +200,7 @@
             </div>
 
             <!-- ROW 5: Session Gameplan + MCX India -->
-            <div class="grid grid-2">
+            <div class="grid grid-2" id="session-row">
                 <!-- SESSION GAMEPLAN -->
                 <div class="card">
                     <div class="card-header">
@@ -206,8 +211,8 @@
                     </div>
                 </div>
 
-                <!-- MCX GOLD (INDIA) -->
-                <div class="card">
+                <!-- MCX GOLD (INDIA) — hidden for crypto -->
+                <div class="card" id="mcx-card">
                     <div class="card-header">
                         <h2 id="mcx-title">🇮🇳 MCX Gold — India</h2>
                     </div>
@@ -352,6 +357,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=7"></script>
 </body>
 </html>

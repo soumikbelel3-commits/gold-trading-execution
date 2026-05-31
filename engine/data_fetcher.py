@@ -48,22 +48,44 @@ class GoldDataFetcher:
         self.start_3m = self.end_date - timedelta(days=90)
         self.start_1m = self.end_date - timedelta(days=30)
 
-        # Cross-asset universe. The "other metal" (silver for gold, gold for
-        # silver) is included so the gold/silver ratio + correlation panel work
-        # for whichever metal is being analyzed.
-        other = self.asset_cfg["other_metal"]
-        self.cross_assets = {
-            "DXY": "DX-Y.NYB",
-            "US10Y": "^TNX",
-            "US02Y": "^IRX",
-            "SPY": "SPY",
-            "TLT": "TLT",
-            "CrudeOil": "CL=F",
-            other["key"]: other["ticker"],
-            "BTC": "BTC-USD",
-            "VIX": "^VIX",
-            f"{self.asset_cfg['etf']}_ETF": self.asset_cfg["etf"],
-        }
+        # Cross-asset universe — depends on asset class.
+        self.asset_class = self.asset_cfg.get("asset_class", "metal")
+        if self.asset_class == "crypto":
+            # Risk-on framing: equities (SPY/QQQ) and the peer crypto matter
+            # most; gold is kept as a macro reference, VIX for risk sentiment.
+            peer = self.asset_cfg.get("peer", {"key": "BTC", "ticker": "BTC-USD"})
+            cross = {
+                "DXY": "DX-Y.NYB",
+                "US10Y": "^TNX",
+                "US02Y": "^IRX",
+                "SPY": "SPY",
+                "QQQ": "QQQ",
+                "Gold": "GC=F",
+                "VIX": "^VIX",
+            }
+            # Add BTC and ETH as crypto references (excluding self).
+            for k, t in (("BTC", "BTC-USD"), ("ETH", "ETH-USD")):
+                if t != self.ticker:
+                    cross[k] = t
+            # Ensure the configured peer is present.
+            cross.setdefault(peer["key"], peer["ticker"])
+            self.cross_assets = cross
+        else:
+            # Metals: the "other metal" (silver for gold, gold for silver) is
+            # included so the gold/silver ratio + correlation panel work.
+            other = self.asset_cfg["other_metal"]
+            self.cross_assets = {
+                "DXY": "DX-Y.NYB",
+                "US10Y": "^TNX",
+                "US02Y": "^IRX",
+                "SPY": "SPY",
+                "TLT": "TLT",
+                "CrudeOil": "CL=F",
+                other["key"]: other["ticker"],
+                "BTC": "BTC-USD",
+                "VIX": "^VIX",
+                f"{self.asset_cfg['etf']}_ETF": self.asset_cfg["etf"],
+            }
     
     def fetch_gold_multi_timeframe(self) -> dict:
         """
@@ -370,8 +392,11 @@ class GoldDataFetcher:
         print(f"  > FX rates ({name} in EUR / JPY / GBP)...")
         data["fx"] = self.fetch_fx_rates()
 
-        print(f"  > {self.asset_cfg['mcx']['name']} / India data...")
-        data["mcx"] = self.fetch_mcx_gold()
+        if self.asset_class == "crypto":
+            data["mcx"] = {}  # no MCX/India contract for crypto
+        else:
+            print(f"  > {self.asset_cfg['mcx']['name']} / India data...")
+            data["mcx"] = self.fetch_mcx_gold()
         
         print("  > Cross-asset universe...")
         data["cross_assets"] = self.fetch_cross_assets()

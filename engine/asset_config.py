@@ -18,6 +18,7 @@ ASSETS = {
         "name": "Gold",
         "symbol": "XAU/USD",
         "logo": "Au",
+        "asset_class": "metal",
         "ticker": "GC=F",
         "etf": "GLD",
         # Counter-metal used for the gold/silver ratio + correlation panel.
@@ -53,6 +54,7 @@ ASSETS = {
         "name": "Silver",
         "symbol": "XAG/USD",
         "logo": "Ag",
+        "asset_class": "metal",
         "ticker": "SI=F",
         "etf": "SLV",
         "other_metal": {"key": "Gold", "ticker": "GC=F"},
@@ -82,5 +84,42 @@ ASSETS = {
         "output_file": "session_data_silver.json",
     },
 }
+
+
+# ── Crypto assets ──────────────────────────────────────────────────
+# A different asset class: no MCX/India contract, no gold-silver ratio,
+# trades 24/7, and risk-on rather than safe-haven. The metals-specific
+# panels are hidden in the dashboard; macro is relabeled honestly (VIX
+# treated as a risk-off headwind, not a safe-haven bid). `peer` is the
+# comparison crypto added to the cross-asset universe. Sizing is in spot
+# units of the coin (point value = $1 per $1 move per coin).
+def _crypto(key, name, symbol, logo, ticker, peer):
+    return {
+        "key": key,
+        "name": name,
+        "symbol": symbol,
+        "logo": logo,
+        "asset_class": "crypto",
+        "ticker": ticker,
+        "peer": peer,  # {"key","ticker"} other major crypto for correlations
+        "futures": {
+            "micro_label": f"{symbol.split('/')[0]} units",
+            "micro_point_value": 1,      # spot: 1 coin, $1 P&L per $1 move
+            "standard_point_value": 1,
+        },
+        "output_file": f"session_data_{key}.json",
+    }
+
+
+ASSETS.update({
+    "bitcoin":  _crypto("bitcoin",  "Bitcoin",  "BTC/USD", "₿", "BTC-USD", {"key": "ETH", "ticker": "ETH-USD"}),
+    "ethereum": _crypto("ethereum", "Ethereum", "ETH/USD", "Ξ", "ETH-USD", {"key": "BTC", "ticker": "BTC-USD"}),
+    "solana":   _crypto("solana",   "Solana",   "SOL/USD", "◎", "SOL-USD", {"key": "BTC", "ticker": "BTC-USD"}),
+    "bnb":      _crypto("bnb",       "BNB",      "BNB/USD", "⬡", "BNB-USD", {"key": "BTC", "ticker": "BTC-USD"}),
+    "xrp":      _crypto("xrp",       "XRP",      "XRP/USD", "✕", "XRP-USD", {"key": "BTC", "ticker": "BTC-USD"}),
+})
+
+# Order in which assets appear in the dashboard toggle / pipeline runs.
+ASSET_ORDER = ["gold", "silver", "bitcoin", "ethereum", "solana", "bnb", "xrp"]
 
 DEFAULT_ASSET = "gold"

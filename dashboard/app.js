@@ -9,12 +9,22 @@ let DATA = null;
 let chart = null;
 let candleSeries = null;
 
-// ── Asset (metal) selection ──
-const ASSET_FILES = { gold: 'session_data.json', silver: 'session_data_silver.json' };
+// ── Asset selection ──
+const ASSET_FILES = {
+    gold: 'session_data.json',
+    silver: 'session_data_silver.json',
+    bitcoin: 'session_data_bitcoin.json',
+    ethereum: 'session_data_ethereum.json',
+    solana: 'session_data_solana.json',
+    bnb: 'session_data_bnb.json',
+    xrp: 'session_data_xrp.json',
+};
 let currentAsset = 'gold';
 
-// Name of the active metal, used in dynamically-built labels.
+// Name of the active asset, used in dynamically-built labels.
 function metal() { return (DATA && DATA.meta && DATA.meta.asset_name) || 'Gold'; }
+// Asset class: "metal" or "crypto".
+function isCrypto() { return (DATA && DATA.meta && DATA.meta.asset_class) === 'crypto'; }
 
 // ── Load Data ──
 async function loadData(asset) {
@@ -78,16 +88,27 @@ function applyAssetLabels() {
 
     const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
 
+    const crypto = isCrypto();
+
     document.title = `${m} Pre-Session Analysis | ${sym}`;
     set('hero-logo', logo);
     set('header-title', `${m} Pre-Session Analysis`);
-    set('header-subtitle', `${sym} & MCX ${m} · Institutional Desk`);
+    set('header-subtitle', crypto
+        ? `${sym} · 24/7 Crypto · Institutional Desk`
+        : `${sym} & MCX ${m} · Institutional Desk`);
     set('chart-title', `📈 ${m} Price Chart`);
-    set('mcx-title', `🇮🇳 MCX ${m} — India`);
     set('scenarios-title', `🌍 Scenarios & ${m} in FX`);
     set('footer-text',
         `${m} Pre-Session Analysis Dashboard · Data from yfinance & Quant Research Pipeline · ` +
         `For educational & research purposes only · Not financial advice`);
+
+    // Metals-only panels: MCX/India card is hidden for crypto, and the
+    // Session row collapses to a single full-width column.
+    const mcxCard = document.getElementById('mcx-card');
+    const sessionRow = document.getElementById('session-row');
+    if (mcxCard) mcxCard.style.display = crypto ? 'none' : '';
+    if (sessionRow) sessionRow.style.gridTemplateColumns = crypto ? '1fr' : '';
+    if (!crypto) set('mcx-title', `🇮🇳 MCX ${m} — India`);
 
     // Reflect active state on the toggle buttons.
     document.querySelectorAll('#asset-toggle .asset-btn').forEach(btn => {
@@ -176,8 +197,12 @@ function renderSignalBar() {
     document.getElementById('signal-confidence').textContent = 
         ((sig.confidence || 0) * 100).toFixed(1) + '%';
     
-    // Regime
-    document.getElementById('signal-regime').textContent = sig.regime || '--';
+    // Regime — semantic color by label (green=bullish, red=bearish, yellow=neutral)
+    const regimeEl = document.getElementById('signal-regime');
+    const regimeTxt = sig.regime || '--';
+    regimeEl.textContent = regimeTxt;
+    regimeEl.style.color = regimeTxt.includes('BULLISH') ? 'var(--green)'
+        : regimeTxt.includes('BEARISH') ? 'var(--red)' : 'var(--amber)';
     
     // Breakdown
     const breakdownEl = document.getElementById('signal-breakdown');
@@ -220,7 +245,7 @@ function renderChart(timeframe) {
         width: container.clientWidth,
         height: 400,
         layout: {
-            background: { type: 'solid', color: '#111113' },
+            background: { type: 'solid', color: '#0C0C0E' },
             textColor: '#8B8B8E',
             fontSize: 11,
             fontFamily: 'Inter, sans-serif',
@@ -231,8 +256,8 @@ function renderChart(timeframe) {
         },
         crosshair: {
             mode: LightweightCharts.CrosshairMode.Normal,
-            vertLine: { color: 'rgba(91, 91, 214, 0.15)', labelBackgroundColor: '#5B5BD6' },
-            horzLine: { color: 'rgba(91, 91, 214, 0.15)', labelBackgroundColor: '#5B5BD6' },
+            vertLine: { color: 'rgba(76, 194, 255, 0.15)', labelBackgroundColor: '#4CC2FF' },
+            horzLine: { color: 'rgba(76, 194, 255, 0.15)', labelBackgroundColor: '#4CC2FF' },
         },
         timeScale: {
             borderColor: 'rgba(255,255,255,0.06)',
@@ -244,12 +269,12 @@ function renderChart(timeframe) {
     });
     
     candleSeries = chart.addCandlestickSeries({
-        upColor: '#45A557',
-        downColor: '#E5484D',
-        borderUpColor: '#45A557',
-        borderDownColor: '#E5484D',
-        wickUpColor: '#45A557',
-        wickDownColor: '#E5484D',
+        upColor: '#3FB950',
+        downColor: '#F85149',
+        borderUpColor: '#3FB950',
+        borderDownColor: '#F85149',
+        wickUpColor: '#3FB950',
+        wickDownColor: '#F85149',
     });
     
     candleSeries.setData(candles);
@@ -280,13 +305,13 @@ function addChartLevels(timeframe) {
         const sma50 = tf.indicators.SMA_50;
         if (sma20) {
             const line1 = candleSeries.createPriceLine({
-                price: sma20, color: '#5B5BD6', lineWidth: 1, lineStyle: 2,
+                price: sma20, color: '#4CC2FF', lineWidth: 1, lineStyle: 2,
                 title: 'SMA 20', axisLabelVisible: false,
             });
         }
         if (sma50) {
             const line2 = candleSeries.createPriceLine({
-                price: sma50, color: '#7C66DC', lineWidth: 1, lineStyle: 2,
+                price: sma50, color: '#8AD7FF', lineWidth: 1, lineStyle: 2,
                 title: 'SMA 50', axisLabelVisible: false,
             });
         }
@@ -295,19 +320,19 @@ function addChartLevels(timeframe) {
     // Pivot point
     if (pivots.PP) {
         candleSeries.createPriceLine({
-            price: pivots.PP, color: '#5B5BD6', lineWidth: 1, lineStyle: 0,
+            price: pivots.PP, color: '#4CC2FF', lineWidth: 1, lineStyle: 0,
             title: 'PP', axisLabelVisible: true,
         });
     }
     if (pivots.R1) {
         candleSeries.createPriceLine({
-            price: pivots.R1, color: '#E5484D', lineWidth: 1, lineStyle: 2,
+            price: pivots.R1, color: '#F85149', lineWidth: 1, lineStyle: 2,
             title: 'R1', axisLabelVisible: true,
         });
     }
     if (pivots.S1) {
         candleSeries.createPriceLine({
-            price: pivots.S1, color: '#45A557', lineWidth: 1, lineStyle: 2,
+            price: pivots.S1, color: '#3FB950', lineWidth: 1, lineStyle: 2,
             title: 'S1', axisLabelVisible: true,
         });
     }
@@ -473,10 +498,15 @@ function renderMacro() {
     const cs = macro.composite_score || 0;
     const maxp = macro.max_possible || 18;
     const tiltPct = Math.max(0, Math.min(100, ((cs + maxp) / (2 * maxp)) * 100));
+    // Crypto is risk-on: frame the gauge as financial conditions / risk, not a
+    // metals-style "bullish/bearish" call from safe-haven logic.
+    const leftLbl = isCrypto() ? 'Risk-Off' : `Bearish ${metal()}`;
+    const rightLbl = isCrypto() ? 'Risk-On' : `Bullish ${metal()}`;
+    const midLbl = isCrypto() ? 'Financial Conditions' : 'Macro Tilt';
     html += `
         <div style="margin-bottom:12px;">
             <div class="flex-between" style="font-size:0.62rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">
-                <span>Bearish ${metal()}</span><span>Macro Tilt</span><span>Bullish ${metal()}</span>
+                <span>${leftLbl}</span><span>${midLbl}</span><span>${rightLbl}</span>
             </div>
             <div style="position:relative; height:10px; background:linear-gradient(90deg, var(--red), var(--bg-elevated), var(--green)); border-radius:6px;">
                 <div style="position:absolute; top:-3px; left:${tiltPct}%; transform:translateX(-50%); width:4px; height:16px; background:var(--text-highlight); border-radius:2px; box-shadow:0 0 6px rgba(0,0,0,0.6);"></div>
@@ -495,6 +525,11 @@ function renderMacro() {
     if (readings.length) {
         html += `<div class="fx-grid" style="margin-bottom:12px;">${readings.map(r => `
             <div class="fx-cell"><div class="fx-cur">${r.k}</div><div class="fx-val">${r.fmt(r.v)}</div></div>`).join('')}</div>`;
+    }
+
+    if (isCrypto()) {
+        html += `<div style="font-size:0.62rem; color:var(--text-muted); background:var(--bg-elevated); border-radius:var(--radius-xs); padding:7px 9px; margin-bottom:10px; border-left:3px solid var(--amber);">
+            Read as a USD / rates / risk backdrop, not a safe-haven call. ${metal()} is risk-on: easy conditions (weak USD, low yields, low VIX) are a tailwind; spikes in fear are a headwind.</div>`;
     }
 
     for (const [name, factor] of Object.entries(factors)) {
@@ -1475,13 +1510,13 @@ function renderEquityCurve(curve) {
 
     const c = LightweightCharts.createChart(container, {
         width: container.clientWidth, height: 160,
-        layout: { background: { type: 'solid', color: '#111113' }, textColor: '#8B8B8E', fontSize: 10 },
+        layout: { background: { type: 'solid', color: '#0C0C0E' }, textColor: '#8B8B8E', fontSize: 10 },
         grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
         timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: false },
         rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
         handleScroll: false, handleScale: false,
     });
-    const strat = c.addLineSeries({ color: '#5B5BD6', lineWidth: 2, title: 'Strategy' });
+    const strat = c.addLineSeries({ color: '#4CC2FF', lineWidth: 2, title: 'Strategy' });
     const bh = c.addLineSeries({ color: '#8B8B8E', lineWidth: 1, lineStyle: 2, title: 'Buy&Hold' });
     strat.setData(curve.map(p => ({ time: p.t, value: p.strat })));
     bh.setData(curve.map(p => ({ time: p.t, value: p.bh })));
