@@ -25,12 +25,14 @@ class GoldMacroScorer:
       Central Bank Hawkish → Gold ↓
     """
     
-    def __init__(self, dxy: float = None, vix: float = None, 
-                 yields: dict = None, cross_assets: dict = None):
+    def __init__(self, dxy: float = None, vix: float = None,
+                 yields: dict = None, cross_assets: dict = None,
+                 metal: str = "Gold"):
         self.dxy = dxy
         self.vix = vix
         self.yields = yields or {}
         self.cross_assets = cross_assets or {}
+        self.metal = metal
     
     def score_all(self) -> dict:
         """Run all macro scores and produce composite."""
@@ -90,7 +92,20 @@ class GoldMacroScorer:
             result["regime"] = "Bearish Gold"
         else:
             result["regime"] = "Strongly Bearish Gold"
-        
+
+        # The macro relationships (inverse to DXY/real yields, safe-haven and
+        # inflation-hedge demand) apply to silver as a precious metal too, so
+        # for non-gold assets we simply relabel the gold-worded strings.
+        if self.metal.lower() != "gold":
+            m = self.metal
+
+            def _relabel(s):
+                return s.replace("Gold", m).replace("gold", m.lower()) if isinstance(s, str) else s
+
+            result["regime"] = _relabel(result["regime"])
+            for f in result["factors"].values():
+                f["detail"] = _relabel(f.get("detail"))
+
         return result
     
     def _score_dxy(self) -> tuple:

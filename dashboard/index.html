@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gold Pre-Session Analysis | XAU/USD & MCX Gold</title>
-    <meta name="description" content="Institutional-grade gold trading pre-session analysis dashboard. Technical analysis, macro scoring, sentiment, volatility, and trade setups.">
-    <link rel="stylesheet" href="styles.css?v=4">
+    <title>Pre-Session Analysis | Gold & Silver</title>
+    <meta name="description" content="Institutional-grade gold & silver trading pre-session analysis dashboard. Technical analysis, macro scoring, sentiment, volatility, and trade setups.">
+    <link rel="stylesheet" href="styles.css?v=5">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -24,10 +24,14 @@
             <header class="header">
                 <div class="header-content">
                     <div class="header-left">
-                        <div class="logo">Au</div>
+                        <div class="logo" id="hero-logo">Au</div>
                         <div class="header-title">
-                            <h1>Gold Pre-Session Analysis</h1>
-                            <div class="subtitle">XAU/USD & MCX Gold · Institutional Desk</div>
+                            <h1 id="header-title">Gold Pre-Session Analysis</h1>
+                            <div class="subtitle" id="header-subtitle">XAU/USD & MCX Gold · Institutional Desk</div>
+                        </div>
+                        <div class="asset-toggle" id="asset-toggle">
+                            <button class="asset-btn active" data-asset="gold">Au · Gold</button>
+                            <button class="asset-btn" data-asset="silver">Ag · Silver</button>
                         </div>
                     </div>
                     <div class="price-hero">
@@ -73,10 +77,12 @@
                 <!-- PRICE CHART -->
                 <div class="card">
                     <div class="card-header">
-                        <h2>📈 Gold Price Chart</h2>
+                        <h2 id="chart-title">📈 Gold Price Chart</h2>
                         <div class="chart-tabs" id="chart-tabs">
-                            <button class="chart-tab active" data-tf="daily">Daily</button>
                             <button class="chart-tab" data-tf="1h">1H</button>
+                            <button class="chart-tab active" data-tf="daily">1Y</button>
+                            <button class="chart-tab" data-tf="max">Max (Wk)</button>
+                            <button class="chart-tab" data-tf="monthly">Max (Mo)</button>
                         </div>
                     </div>
                     <div class="card-body">
@@ -203,7 +209,7 @@
                 <!-- MCX GOLD (INDIA) -->
                 <div class="card">
                     <div class="card-header">
-                        <h2>🇮🇳 MCX Gold — India</h2>
+                        <h2 id="mcx-title">🇮🇳 MCX Gold — India</h2>
                     </div>
                     <div class="card-body">
                         <div id="mcx-data"></div>
@@ -329,7 +335,7 @@
                 <!-- SCENARIOS + GOLD IN FX -->
                 <div class="card">
                     <div class="card-header">
-                        <h2>🌍 Scenarios & Gold in FX</h2>
+                        <h2 id="scenarios-title">🌍 Scenarios & Gold in FX</h2>
                     </div>
                     <div class="card-body">
                         <div id="gold-in-fx" class="mb-2"></div>
@@ -339,13 +345,13 @@
             </div>
 
             <!-- FOOTER -->
-            <footer class="footer">
-                Gold Pre-Session Analysis Dashboard · Data from yfinance & Quant Research Pipeline · 
+            <footer class="footer" id="footer-text">
+                Gold Pre-Session Analysis Dashboard · Data from yfinance & Quant Research Pipeline ·
                 For educational & research purposes only · Not financial advice
             </footer>
         </div>
     </div>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=4"></script>
 </body>
 </html>

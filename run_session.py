@@ -58,6 +58,7 @@ from engine.backtest_engine import GoldBacktestEngine
 from engine.structure_engine import GoldStructureEngine
 from engine.scenario_engine import GoldScenarioEngine
 from engine.ml_engine import GoldMLEngine
+from engine.asset_config import ASSETS, DEFAULT_ASSET
 
 
 # ═══════════════════════════════════════════════════════════
@@ -69,22 +70,25 @@ DASHBOARD_DIR = PROJECT_ROOT / "dashboard"
 PORT = 8877
 
 
-def run_analysis() -> dict:
+def run_analysis(asset_key: str = DEFAULT_ASSET) -> dict:
     """
-    Execute the full pre-session analysis pipeline.
-    Returns the complete analysis dictionary.
+    Execute the full pre-session analysis pipeline for the given metal
+    ("gold" or "silver"). Returns the complete analysis dictionary.
     """
+    cfg = ASSETS.get(asset_key, ASSETS[DEFAULT_ASSET])
+    metal = cfg["name"]
+
     print()
     print("=" * 65)
-    print("  GOLD PRE-SESSION ANALYSIS")
+    print(f"  {metal.upper()} PRE-SESSION ANALYSIS")
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (Local Time)")
     print("=" * 65)
     print()
-    
+
     start_time = time.time()
-    
+
     # ── 1. Data Acquisition ──
-    fetcher = GoldDataFetcher()
+    fetcher = GoldDataFetcher(asset_key)
     data = fetcher.fetch_all()
     
     # ── 2. Technical Analysis ──
@@ -92,6 +96,24 @@ def run_analysis() -> dict:
     tech_analyzer = GoldTechnicalAnalyzer(data["gold"])
     technical = tech_analyzer.analyze_all()
     print(f"  [OK] Price: ${technical['current_price']}" if technical['current_price'] else "  [!] Price unavailable")
+
+    # Long-range chart history: resample the full daily history into weekly and
+    # monthly candles for the dashboard's "Max" / "30Y" chart tabs. Kept separate
+    # from the 1-year `daily` series that the indicators/Fibonacci rely on.
+    import pandas as _pd
+    chart_hist = data.get("gold_chart", _pd.DataFrame())
+    if chart_hist is not None and not chart_hist.empty and "Close" in chart_hist.columns:
+        agg = {"Open": "first", "High": "max", "Low": "min", "Close": "last"}
+        try:
+            weekly = chart_hist.resample("W").agg(agg).dropna()
+            monthly = chart_hist.resample("MS").agg(agg).dropna()
+            technical.setdefault("candlestick_data", {})
+            technical["candlestick_data"]["max"] = tech_analyzer._format_candles(weekly, len(weekly))
+            technical["candlestick_data"]["monthly"] = tech_analyzer._format_candles(monthly, len(monthly))
+            yrs = round((chart_hist.index[-1] - chart_hist.index[0]).days / 365.25, 1)
+            print(f"  [OK] Long-range chart: {yrs}y ({len(weekly)} weekly / {len(monthly)} monthly candles)")
+        except Exception as e:
+            print(f"  [!] Long-range chart build failed: {e}")
     
     # ── 3. Macro Scoring ──
     print("[MACRO] Scoring macro environment...")
@@ -100,6 +122,7 @@ def run_analysis() -> dict:
         vix=data.get("vix"),
         yields=data.get("yields", {}),
         cross_assets=data.get("cross_assets", {}),
+        metal=metal,
     )
     macro = macro_scorer.score_all()
     print(f"  [OK] Macro regime: {macro['regime']}")
@@ -132,7 +155,7 @@ def run_analysis() -> dict:
     # ── 6b. Market Structure ──
     print("[STRUCT] Analyzing market structure (confluence, patterns, ADX, VWAP)...")
     structure = GoldStructureEngine(
-        daily_df, h1_df, technical, data.get("cross_assets", {})
+        daily_df, h1_df, technical, data.get("cross_assets", {}), asset_cfg=cfg
     ).analyze()
     print(f"  [OK] Confluence zones: {len(structure.get('confluence_zones', []))}, "
           f"ADX: {structure.get('adx', {}).get('strength', 'N/A')}")
@@ -187,6 +210,7 @@ def run_analysis() -> dict:
         volatility=volatility,
         composite_signal=composite_signal,
         mcx_data=data.get("mcx", {}),
+        asset_cfg=cfg,
     )
     session_plan = planner.plan()
     print(f"  [OK] Active session: {session_plan['active_session']}")
@@ -211,7 +235,11 @@ def run_analysis() -> dict:
         "meta": {
             "generated_at": datetime.now().isoformat(),
             "elapsed_seconds": round(elapsed, 2),
-            "version": "2.0.0",
+            "version": "2.1.0",
+            "asset": cfg["key"],
+            "asset_name": cfg["name"],
+            "asset_symbol": cfg["symbol"],
+            "asset_logo": cfg["logo"],
         },
         "technical": technical,
         "macro": macro,
@@ -250,9 +278,11 @@ def _print_summary(output: dict):
     price = tech.get("current_price", "N/A")
     change = tech.get("daily_change", 0)
     change_pct = tech.get("daily_change_pct", 0)
-    
+    meta = output["meta"]
+    asset_label = f"{meta.get('asset_name', 'Gold')} ({meta.get('asset_symbol', 'XAU/USD')})"
+
     print(f"""
-  Gold (XAU/USD):  ${price}  ({change:+.2f} / {change_pct:+.3f}%)
+  {asset_label}:  ${price}  ({change:+.2f} / {change_pct:+.3f}%)
   -------------------------------------------------
   Technical Bias:   {tech.get('overall_bias', 'N/A')} (Score: {tech.get('overall_score', 0)})
   Macro Regime:     {macro.get('regime', 'N/A')} ({macro.get('composite_score', 0):+.1f})
@@ -271,10 +301,12 @@ def _print_summary(output: dict):
 """)
 
 
-def save_output(output: dict):
+def save_output(output: dict, asset_key: str = DEFAULT_ASSET):
     """Save analysis output as JSON for the dashboard."""
-    filepath = OUTPUT_DIR / "session_data.json"
-    
+    cfg = ASSETS.get(asset_key, ASSETS[DEFAULT_ASSET])
+    out_name = cfg["output_file"]
+    filepath = OUTPUT_DIR / out_name
+
     # Custom serializer for numpy/pandas types
     def default_serializer(obj):
         import numpy as np
@@ -296,7 +328,7 @@ def save_output(output: dict):
         json.dump(output, f, indent=2, default=default_serializer, ensure_ascii=False)
     
     # Also copy to dashboard dir for serving
-    dash_copy = DASHBOARD_DIR / "session_data.json"
+    dash_copy = DASHBOARD_DIR / out_name
     with open(dash_copy, 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2, default=default_serializer, ensure_ascii=False)
     
@@ -355,13 +387,13 @@ def serve_dashboard():
 def main():
     """Main entry point."""
     try:
-        # Run analysis
-        output = run_analysis()
-        
-        # Save output
-        print("[SAVE] Saving results...")
-        save_output(output)
-        
+        # Run the full pipeline for each metal and save its own JSON.
+        # The dashboard's Gold/Silver toggle swaps between these files.
+        for asset_key in ("gold", "silver"):
+            output = run_analysis(asset_key)
+            print(f"[SAVE] Saving {ASSETS[asset_key]['name']} results...")
+            save_output(output, asset_key)
+
         # Serve dashboard
         print("\n[WEB] Starting dashboard server...")
         serve_dashboard()
