@@ -79,10 +79,10 @@ class GoldMacroScorer:
         result["normalized_score"] = round(total / result["max_possible"], 4)
         
         # Regime classification
-        if self.asset_class == "crypto":
+        if self.asset_class in ("crypto", "index"):
             # Honest framing: this is a USD/rates/risk *financial-conditions*
             # read, not a metals-style safe-haven call. Easy conditions (weak
-            # USD, low yields, low VIX) are a risk-on tailwind for crypto.
+            # USD, low yields, low VIX) are a risk-on tailwind for risk assets.
             if total >= 8:
                 result["regime"] = "Very Easy Conditions — risk-on tailwind"
             elif total >= 4:
@@ -178,21 +178,21 @@ class GoldMacroScorer:
         if self.vix is None:
             return 0, "No VIX data"
 
-        # Crypto is risk-ON: high VIX (fear/risk-off) is a HEADWIND, the
-        # opposite of gold's safe-haven bid. Flip the sign and the wording.
-        if self.asset_class == "crypto":
+        # Risk-ON assets (crypto, equity indices): high VIX (fear/risk-off) is a
+        # HEADWIND, the opposite of gold's safe-haven bid. Flip sign + wording.
+        if self.asset_class in ("crypto", "index"):
             if self.vix > 35:
-                return -2, f"VIX at {self.vix:.1f} — extreme fear, risk-off hammers crypto"
+                return -2, f"VIX at {self.vix:.1f} — extreme fear, risk-off hammers risk assets"
             elif self.vix > 28:
-                return -1, f"VIX at {self.vix:.1f} — high fear, risk-off headwind for crypto"
+                return -1, f"VIX at {self.vix:.1f} — high fear, risk-off headwind"
             elif self.vix > 22:
-                return 0, f"VIX at {self.vix:.1f} — elevated fear, mixed for crypto"
+                return 0, f"VIX at {self.vix:.1f} — elevated fear, mixed"
             elif self.vix > 16:
                 return 0, f"VIX at {self.vix:.1f} — normal volatility, neutral"
             elif self.vix > 12:
-                return 1, f"VIX at {self.vix:.1f} — low fear, risk-on supports crypto"
+                return 1, f"VIX at {self.vix:.1f} — low fear, risk-on tailwind"
             else:
-                return 2, f"VIX at {self.vix:.1f} — complacency/risk-on, crypto tailwind"
+                return 2, f"VIX at {self.vix:.1f} — complacency/risk-on, supportive"
 
         if self.vix > 35:
             return 3, f"VIX at {self.vix:.1f} — extreme fear, strong safe-haven bid for gold"

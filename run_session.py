@@ -257,6 +257,7 @@ def run_analysis(asset_key: str = DEFAULT_ASSET) -> dict:
         "scenario": scenario,
         "composite_signal": composite_signal,
         "session_plan": session_plan,
+        "world_indices": data.get("world_indices", []),
     }
     
     # Print summary

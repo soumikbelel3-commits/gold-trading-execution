@@ -183,6 +183,42 @@ drives the pipeline run order and toggle layout.
 MCX card hidden, 24/7 session shown, no gold/silver ratio, macro tilt =
 "Risk-Off / Risk-On" for all crypto tabs.
 
+## World indices (panel + index assets)
+
+Two additions: a **World Indices overview panel** and **S&P 500 / Nasdaq 100 as
+full toggle assets** (a third asset class, `index`).
+
+### Overview panel
+- `data_fetcher.fetch_world_indices()` batch-downloads 14 major global indices
+  (S&P 500, Nasdaq, Dow, Russell 2000, FTSE 100, DAX, CAC 40, Euro Stoxx 50,
+  Nikkei 225, Hang Seng, Nifty 50, Sensex, KOSPI, ASX 200) → name/symbol/region/
+  price/daily %. Attached to every asset's `output["world_indices"]`.
+- Frontend: `renderWorldIndices()` draws a responsive tile grid (`#world-indices`),
+  color-coded green/red/yellow by daily change. Shown on every asset tab as
+  global macro context.
+
+### Index assets (`asset_class: "index"`)
+- `asset_config._index()` adds **S&P 500** (`^GSPC`) and **Nasdaq 100** (`^NDX`)
+  with index-futures point values (MES $5 / ES $50; MNQ $2 / NQ $20) and a peer
+  index for correlations.
+- Engines treat `index` as **risk-on, same as crypto**: VIX flipped in macro
+  (financial-conditions regime), no MCX, no gold/silver ratio, risk-on
+  correlation regimes. New **US Cash Session** model in `session_planner`
+  (09:30–16:00 ET) instead of 24/7 or Asian/London/NY.
+- The crypto/index branches are unified via `asset_class in ("crypto","index")`
+  in macro_scorer & correlation_engine, and `!= "metal"` for MCX/ratio hiding.
+
+### Dashboard
+- Toggle now has 9 assets (Gold · Silver · BTC · ETH · SOL · BNB · XRP · S&P 500
+  · Nasdaq). Non-metal classes hide MCX + ratio and use the Risk-Off/Risk-On
+  macro gauge; index subtitle reads "Equity Index", crypto "24/7 Crypto".
+
+### Verified (live preview, no console errors)
+- World Indices panel: 14/14 populated, color-coded (S&P +0.26%, Russell −0.47%,
+  Hang Seng +2.52%, Nikkei −0.30% …); visible on every tab.
+- S&P 500 tab: $7,600, US Cash Session, MES sizing, "Mildly Easy Conditions"
+  macro, BULLISH regime green; MCX hidden, no gold/silver ratio. Nasdaq similar.
+
 ## Caveats / future tweaks
 - Pipeline **sentiment** parquet (Fear & Greed / news) is market-wide/gold-
   sourced; it's reused for silver as a market-sentiment proxy and labeled

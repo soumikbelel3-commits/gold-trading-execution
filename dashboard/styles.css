@@ -1179,10 +1179,9 @@ body {
     .card { margin-bottom: 12px; }
 }
 
-/* ── Asset Toggle (Gold / Silver / Crypto) ── */
-.asset-toggle {
+/* ── Asset Nav (Commodity / Crypto / Index dropdowns) ── */
+.asset-nav {
     display: inline-flex;
-    flex-wrap: wrap;
     margin-left: 8px;
     padding: 3px;
     gap: 2px;
@@ -1190,24 +1189,83 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
 }
-.asset-btn {
+.asset-group { position: relative; }
+.group-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     font-family: inherit;
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.01em;
     color: var(--text-secondary);
     background: transparent;
     border: 1px solid transparent;
     border-radius: var(--radius-xs);
-    padding: 3px 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+.group-trigger:hover { color: var(--text-primary); background: var(--gold-subtle); }
+.group-trigger .gt-sel { color: var(--gold); font-weight: 700; }
+.group-trigger .caret { font-size: 0.6rem; color: var(--text-muted); transition: var(--transition); }
+.asset-group.open .group-trigger { color: var(--text-primary); background: var(--gold-subtle); }
+.asset-group.open .group-trigger .caret { transform: rotate(180deg); }
+.asset-group.active .group-trigger {
+    color: var(--text-highlight);
+    background: var(--gold-subtle);
+    border-color: var(--border-gold);
+}
+.group-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 200;
+    min-width: 150px;
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.asset-group.open .group-menu { display: flex; }
+.asset-btn {
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-align: left;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-xs);
+    padding: 6px 10px;
     cursor: pointer;
     transition: var(--transition);
     white-space: nowrap;
 }
 .asset-btn:hover { color: var(--text-primary); background: var(--gold-subtle); }
+
+/* ── World Indices panel ── */
+.indices-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+@media (max-width: 1200px) { .indices-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 768px) { .indices-grid { grid-template-columns: repeat(2, 1fr); } }
+.index-cell {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    padding: 8px 10px;
+}
+.index-head { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
+.index-name { font-size: 0.66rem; font-weight: 600; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.index-region { font-size: 0.54rem; color: var(--text-muted); flex-shrink: 0; }
+.index-price { font-size: 0.92rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; margin-top: 3px; }
+.index-chg { font-size: 0.7rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; margin-top: 1px; }
 .asset-btn.active {
     color: var(--text-highlight);
     background: var(--gold);
     border-color: var(--border-gold);
-    box-shadow: var(--shadow-gold);
 }

@@ -77,6 +77,21 @@ class GoldSessionPlanner:
         },
     }
 
+    # Equity indices trade around the US cash session (futures run ~23h).
+    INDEX_SESSIONS = {
+        "US Cash Session": {
+            "start_utc": 13.5,   # 09:30 ET
+            "end_utc": 20.0,     # 16:00 ET
+            "characteristics": [
+                "US cash equities 09:30-16:00 ET (13:30-20:00 UTC)",
+                "Index futures (ES/NQ) trade nearly 24h; pre-market gaps matter",
+                "Opening 30 min and the final hour carry the most volume",
+                "Key catalysts: US macro prints, Fed, mega-cap earnings",
+            ],
+            "volatility_rank": "High (US hours)",
+        },
+    }
+
     def __init__(self, technical: dict, macro: dict, volatility: dict,
                  composite_signal: dict, mcx_data: dict = None,
                  asset_cfg: dict = None):
@@ -94,14 +109,25 @@ class GoldSessionPlanner:
         now_utc = datetime.now(timezone.utc)
         current_hour = now_utc.hour + now_utc.minute / 60
 
-        is_crypto = self.asset_class == "crypto"
-        sessions_map = self.CRYPTO_SESSIONS if is_crypto else self.SESSIONS
+        is_metal = self.asset_class == "metal"
+        if self.asset_class == "crypto":
+            sessions_map = self.CRYPTO_SESSIONS
+            primary_session = "24/7 Global Market"
+            next_sess = {"name": "Always open (24/7)", "hours_until": 0}
+        elif self.asset_class == "index":
+            sessions_map = self.INDEX_SESSIONS
+            primary_session = "US Cash Session"
+            next_sess = {"name": "US Cash Session", "hours_until": 0}
+        else:
+            sessions_map = self.SESSIONS
+            primary_session = None
+            next_sess = None
 
         result = {
             "current_time_utc": now_utc.strftime("%Y-%m-%d %H:%M UTC"),
             "current_time_ist": (now_utc + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d %H:%M IST"),
-            "active_session": "24/7 Global Market" if is_crypto else self._get_active_session(current_hour),
-            "next_session": {"name": "Always open (24/7)", "hours_until": 0} if is_crypto else self._get_next_session(current_hour),
+            "active_session": self._get_active_session(current_hour) if is_metal else primary_session,
+            "next_session": self._get_next_session(current_hour) if is_metal else next_sess,
             "sessions": {},
             "mcx_gameplan": {},
             "risk_parameters": {},
@@ -115,7 +141,7 @@ class GoldSessionPlanner:
             )
 
         # MCX-specific gameplan (precious metals only)
-        result["mcx_gameplan"] = {} if is_crypto else self._build_mcx_plan()
+        result["mcx_gameplan"] = self._build_mcx_plan() if is_metal else {}
         
         # Risk parameters
         result["risk_parameters"] = self._compute_risk_params()
@@ -163,7 +189,7 @@ class GoldSessionPlanner:
         current_price = self.technical.get("current_price", 0)
         
         # Session-specific bias
-        if name == "24/7 Global Market":
+        if name in ("24/7 Global Market", "US Cash Session"):
             if signal_val > 0.2:
                 plan["bias"] = "Bullish bias — buy dips"
                 plan["strategy"] = "Accumulate on pullbacks to support; momentum favors longs"
@@ -325,7 +351,7 @@ class GoldSessionPlanner:
             }
 
         # MCX position sizing (precious metals only)
-        if self.asset_class != "crypto":
+        if self.asset_class == "metal":
             mcx_cfg = self.asset_cfg["mcx"]
             risk["mcx_sizing"] = {
                 "mcx_name": mcx_cfg["name"],

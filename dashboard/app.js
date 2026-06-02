@@ -18,13 +18,17 @@ const ASSET_FILES = {
     solana: 'session_data_solana.json',
     bnb: 'session_data_bnb.json',
     xrp: 'session_data_xrp.json',
+    sp500: 'session_data_sp500.json',
+    nasdaq: 'session_data_nasdaq.json',
 };
 let currentAsset = 'gold';
 
 // Name of the active asset, used in dynamically-built labels.
 function metal() { return (DATA && DATA.meta && DATA.meta.asset_name) || 'Gold'; }
-// Asset class: "metal" or "crypto".
-function isCrypto() { return (DATA && DATA.meta && DATA.meta.asset_class) === 'crypto'; }
+// Asset class: "metal", "crypto", or "index".
+function assetClass() { return (DATA && DATA.meta && DATA.meta.asset_class) || 'metal'; }
+function isMetal() { return assetClass() === 'metal'; }
+function isCrypto() { return assetClass() === 'crypto'; }
 
 // ── Load Data ──
 async function loadData(asset) {
@@ -65,6 +69,7 @@ function renderAll() {
     renderRiskParams();
     renderML();
     renderMonteCarlo();
+    renderWorldIndices();
     renderConfluence();
     renderStructure();
     renderSeasonality();
@@ -88,46 +93,85 @@ function applyAssetLabels() {
 
     const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
 
-    const crypto = isCrypto();
+    const cls = assetClass();
+    const nonMetal = cls !== 'metal';
+
+    const subtitle = cls === 'crypto' ? `${sym} · 24/7 Crypto · Institutional Desk`
+        : cls === 'index' ? `${sym} · Equity Index · Institutional Desk`
+        : `${sym} & MCX ${m} · Institutional Desk`;
 
     document.title = `${m} Pre-Session Analysis | ${sym}`;
     set('hero-logo', logo);
     set('header-title', `${m} Pre-Session Analysis`);
-    set('header-subtitle', crypto
-        ? `${sym} · 24/7 Crypto · Institutional Desk`
-        : `${sym} & MCX ${m} · Institutional Desk`);
+    set('header-subtitle', subtitle);
     set('chart-title', `📈 ${m} Price Chart`);
     set('scenarios-title', `🌍 Scenarios & ${m} in FX`);
     set('footer-text',
         `${m} Pre-Session Analysis Dashboard · Data from yfinance & Quant Research Pipeline · ` +
         `For educational & research purposes only · Not financial advice`);
 
-    // Metals-only panels: MCX/India card is hidden for crypto, and the
-    // Session row collapses to a single full-width column.
+    // Metals-only panels: MCX/India card is hidden for crypto & indices, and
+    // the Session row collapses to a single full-width column.
     const mcxCard = document.getElementById('mcx-card');
     const sessionRow = document.getElementById('session-row');
-    if (mcxCard) mcxCard.style.display = crypto ? 'none' : '';
-    if (sessionRow) sessionRow.style.gridTemplateColumns = crypto ? '1fr' : '';
-    if (!crypto) set('mcx-title', `🇮🇳 MCX ${m} — India`);
+    if (mcxCard) mcxCard.style.display = nonMetal ? 'none' : '';
+    if (sessionRow) sessionRow.style.gridTemplateColumns = nonMetal ? '1fr' : '';
+    if (!nonMetal) set('mcx-title', `🇮🇳 MCX ${m} — India`);
 
-    // Reflect active state on the toggle buttons.
-    document.querySelectorAll('#asset-toggle .asset-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.asset === currentAsset);
+    // Reflect active state across the grouped nav: highlight the selected
+    // asset, highlight its category, and show the asset name in that trigger.
+    document.querySelectorAll('#asset-nav .asset-group').forEach(group => {
+        let activeBtn = null;
+        group.querySelectorAll('.asset-btn').forEach(btn => {
+            const on = btn.dataset.asset === currentAsset;
+            btn.classList.toggle('active', on);
+            if (on) activeBtn = btn;
+        });
+        group.classList.toggle('active', !!activeBtn);
+        const sel = group.querySelector('.gt-sel');
+        if (sel) sel.textContent = activeBtn ? '· ' + (ASSET_SHORT[currentAsset] || metal()) : '';
     });
 }
 
+// Short labels shown in a category trigger when one of its assets is active.
+const ASSET_SHORT = {
+    gold: 'Gold', silver: 'Silver',
+    bitcoin: 'BTC', ethereum: 'ETH', solana: 'SOL', bnb: 'BNB', xrp: 'XRP',
+    sp500: 'S&P 500', nasdaq: 'Nasdaq',
+};
+
 let assetToggleWired = false;
+function closeAssetMenus() {
+    document.querySelectorAll('#asset-nav .asset-group.open').forEach(g => g.classList.remove('open'));
+}
 function setupAssetToggle() {
     if (assetToggleWired) return;           // wire once; survives re-renders
-    const toggle = document.getElementById('asset-toggle');
-    if (!toggle) return;
-    toggle.querySelectorAll('.asset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const asset = btn.dataset.asset;
-            if (asset === currentAsset) return;
-            loadData(asset);
+    const nav = document.getElementById('asset-nav');
+    if (!nav) return;
+
+    // Category dropdown triggers — open one menu at a time.
+    nav.querySelectorAll('.asset-group').forEach(group => {
+        const trigger = group.querySelector('.group-trigger');
+        if (trigger) trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const wasOpen = group.classList.contains('open');
+            closeAssetMenus();
+            if (!wasOpen) group.classList.add('open');
         });
     });
+
+    // Asset selection.
+    nav.querySelectorAll('.asset-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeAssetMenus();
+            const asset = btn.dataset.asset;
+            if (asset !== currentAsset) loadData(asset);
+        });
+    });
+
+    // Click outside closes any open menu.
+    document.addEventListener('click', closeAssetMenus);
     assetToggleWired = true;
 }
 
@@ -498,11 +542,12 @@ function renderMacro() {
     const cs = macro.composite_score || 0;
     const maxp = macro.max_possible || 18;
     const tiltPct = Math.max(0, Math.min(100, ((cs + maxp) / (2 * maxp)) * 100));
-    // Crypto is risk-on: frame the gauge as financial conditions / risk, not a
-    // metals-style "bullish/bearish" call from safe-haven logic.
-    const leftLbl = isCrypto() ? 'Risk-Off' : `Bearish ${metal()}`;
-    const rightLbl = isCrypto() ? 'Risk-On' : `Bullish ${metal()}`;
-    const midLbl = isCrypto() ? 'Financial Conditions' : 'Macro Tilt';
+    // Risk-on assets (crypto, indices): frame the gauge as financial conditions
+    // / risk, not a metals-style "bullish/bearish" call from safe-haven logic.
+    const riskOn = !isMetal();
+    const leftLbl = riskOn ? 'Risk-Off' : `Bearish ${metal()}`;
+    const rightLbl = riskOn ? 'Risk-On' : `Bullish ${metal()}`;
+    const midLbl = riskOn ? 'Financial Conditions' : 'Macro Tilt';
     html += `
         <div style="margin-bottom:12px;">
             <div class="flex-between" style="font-size:0.62rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:4px;">
@@ -527,7 +572,7 @@ function renderMacro() {
             <div class="fx-cell"><div class="fx-cur">${r.k}</div><div class="fx-val">${r.fmt(r.v)}</div></div>`).join('')}</div>`;
     }
 
-    if (isCrypto()) {
+    if (!isMetal()) {
         html += `<div style="font-size:0.62rem; color:var(--text-muted); background:var(--bg-elevated); border-radius:var(--radius-xs); padding:7px 9px; margin-bottom:10px; border-left:3px solid var(--amber);">
             Read as a USD / rates / risk backdrop, not a safe-haven call. ${metal()} is risk-on: easy conditions (weak USD, low yields, low VIX) are a tailwind; spikes in fear are a headwind.</div>`;
     }
@@ -1266,6 +1311,36 @@ function renderMonteCarlo() {
     }
 
     container.innerHTML = html;
+}
+
+// ═══════════════════════════════════════
+// WORLD INDICES (global macro context)
+// ═══════════════════════════════════════
+function renderWorldIndices() {
+    const el = document.getElementById('world-indices');
+    if (!el) return;
+    const idx = (DATA && DATA.world_indices) || [];
+    if (!idx.length) {
+        el.innerHTML = '<div class="text-muted" style="font-size:0.72rem;">World index data unavailable.</div>';
+        return;
+    }
+    el.innerHTML = idx.map(i => {
+        const c = i.change_pct;
+        const color = c == null ? 'var(--text-muted)'
+            : c > 0.05 ? 'var(--green)' : c < -0.05 ? 'var(--red)' : 'var(--amber)';
+        const arrow = c == null ? '' : c > 0 ? '▲' : c < 0 ? '▼' : '–';
+        const priceStr = i.price != null ? Number(i.price).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--';
+        const chgStr = c != null ? `${c >= 0 ? '+' : ''}${c.toFixed(2)}%` : '--';
+        return `
+            <div class="index-cell">
+                <div class="index-head">
+                    <span class="index-name" title="${i.name} (${i.symbol})">${i.name}</span>
+                    <span class="index-region">${i.region}</span>
+                </div>
+                <div class="index-price">${priceStr}</div>
+                <div class="index-chg" style="color:${color}">${arrow} ${chgStr}</div>
+            </div>`;
+    }).join('');
 }
 
 // ═══════════════════════════════════════
