@@ -152,17 +152,21 @@ class GoldCorrelationEngine:
         btc_corr = corr_30d.get("BTC", 0)
         name = self.name
 
-        # Crypto is risk-ON — frame the regime around equities/USD, not havens.
-        if self.asset_class == "crypto":
-            equity_corr = max(spy_corr, qqq_corr)
+        # Risk-ON assets (crypto, equity indices) — frame the regime around
+        # equities/USD, not safe havens.
+        if self.asset_class in ("crypto", "index"):
+            equity_corr = max(spy_corr, qqq_corr,
+                              corr_30d.get("DowJones", 0),
+                              corr_30d.get("Nasdaq", 0),
+                              corr_30d.get("S&P500", 0))
             if equity_corr > 0.5:
-                return f"Risk-On ({name} tracking equities/Nasdaq)"
+                return f"Risk-On ({name} tracking equities)"
             elif dxy_corr < -0.4:
                 return f"Dollar-Driven ({name} inversely tracking USD)"
-            elif btc_corr > 0.7:
+            elif self.asset_class == "crypto" and btc_corr > 0.7:
                 return f"Crypto-Correlated ({name} moving with BTC)"
             elif equity_corr < -0.3:
-                return f"Risk-Off pressure ({name} falling with equities weak)"
+                return f"De-Risking ({name} falling as equities weaken)"
             elif abs(dxy_corr) < 0.15 and abs(equity_corr) < 0.15:
                 return f"Decorrelated ({name} moving independently)"
             else:

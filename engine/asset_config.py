@@ -119,7 +119,38 @@ ASSETS.update({
     "xrp":      _crypto("xrp",       "XRP",      "XRP/USD", "✕", "XRP-USD", {"key": "BTC", "ticker": "BTC-USD"}),
 })
 
+
+# ── Equity index assets ────────────────────────────────────────────
+# Risk-on asset class like crypto (no MCX, no gold/silver ratio, macro VIX
+# treated as risk-off). Sized in index-futures points. `peer` is the other
+# index used for the correlation panel.
+def _index(key, name, symbol, logo, ticker, peer, micro_label, micro_pv, std_pv):
+    return {
+        "key": key,
+        "name": name,
+        "symbol": symbol,
+        "logo": logo,
+        "asset_class": "index",
+        "ticker": ticker,
+        "peer": peer,
+        "futures": {
+            "micro_label": micro_label,
+            "micro_point_value": micro_pv,    # $ P&L per 1.0 index point (micro)
+            "standard_point_value": std_pv,   # $ P&L per 1.0 index point (e-mini)
+        },
+        "output_file": f"session_data_{key}.json",
+    }
+
+
+ASSETS.update({
+    "sp500":  _index("sp500",  "S&P 500",    "SPX", "SPX", "^GSPC",
+                     {"key": "Nasdaq", "ticker": "^IXIC"}, "Micro S&P (MES)", 5, 50),
+    "nasdaq": _index("nasdaq", "Nasdaq 100", "NDX", "NDX", "^NDX",
+                     {"key": "S&P500", "ticker": "^GSPC"}, "Micro Nasdaq (MNQ)", 2, 20),
+})
+
 # Order in which assets appear in the dashboard toggle / pipeline runs.
-ASSET_ORDER = ["gold", "silver", "bitcoin", "ethereum", "solana", "bnb", "xrp"]
+ASSET_ORDER = ["gold", "silver", "bitcoin", "ethereum", "solana", "bnb", "xrp",
+               "sp500", "nasdaq"]
 
 DEFAULT_ASSET = "gold"

@@ -20,6 +20,25 @@ except ImportError:  # allow running as a top-level module
 
 warnings.filterwarnings("ignore")
 
+# Major global equity indices for the World Indices overview panel.
+# (display name, yfinance symbol, region)
+WORLD_INDICES = [
+    ("S&P 500", "^GSPC", "US"),
+    ("Nasdaq", "^IXIC", "US"),
+    ("Dow Jones", "^DJI", "US"),
+    ("Russell 2000", "^RUT", "US"),
+    ("FTSE 100", "^FTSE", "UK"),
+    ("DAX", "^GDAXI", "DE"),
+    ("CAC 40", "^FCHI", "FR"),
+    ("Euro Stoxx 50", "^STOXX50E", "EU"),
+    ("Nikkei 225", "^N225", "JP"),
+    ("Hang Seng", "^HSI", "HK"),
+    ("Nifty 50", "^NSEI", "IN"),
+    ("Sensex", "^BSESN", "IN"),
+    ("KOSPI", "^KS11", "KR"),
+    ("ASX 200", "^AXJO", "AU"),
+]
+
 # Path to existing data collection pipeline
 DATA_COLLECTION_DIR = Path(__file__).resolve().parent.parent.parent / "Data collection" / "data" / "raw"
 SENTIMENT_DIR = DATA_COLLECTION_DIR.parent / "raw" / "sentiment_data"
@@ -68,6 +87,20 @@ class GoldDataFetcher:
                 if t != self.ticker:
                     cross[k] = t
             # Ensure the configured peer is present.
+            cross.setdefault(peer["key"], peer["ticker"])
+            self.cross_assets = cross
+        elif self.asset_class == "index":
+            # Equity index: compare against macro drivers + other indices.
+            peer = self.asset_cfg.get("peer", {"key": "S&P500", "ticker": "^GSPC"})
+            cross = {
+                "DXY": "DX-Y.NYB",
+                "US10Y": "^TNX",
+                "US02Y": "^IRX",
+                "VIX": "^VIX",
+                "Gold": "GC=F",
+                "DowJones": "^DJI",
+                "BTC": "BTC-USD",
+            }
             cross.setdefault(peer["key"], peer["ticker"])
             self.cross_assets = cross
         else:
@@ -371,6 +404,47 @@ class GoldDataFetcher:
             print(f"  ⚠ Signals read error: {e}")
         return {}
     
+    def fetch_world_indices(self) -> list:
+        """
+        Snapshot of major global equity indices for the World Indices panel.
+        One batched download; returns [{name, symbol, region, price, change_pct}].
+        """
+        symbols = [s for _, s, _ in WORLD_INDICES]
+        df = None
+        try:
+            df = yf.download(" ".join(symbols), period="7d", interval="1d",
+                             progress=False, group_by="ticker")
+        except Exception as e:
+            print(f"  WARNING: World indices fetch error: {e}")
+
+        out = []
+        for name, sym, region in WORLD_INDICES:
+            price, chg = None, None
+            try:
+                sub = None
+                if df is not None and isinstance(df.columns, pd.MultiIndex) and sym in df.columns.get_level_values(0):
+                    sub = df[sym]
+                elif df is not None and not isinstance(df.columns, pd.MultiIndex):
+                    sub = df  # single-ticker fallback
+                if sub is not None and "Close" in sub.columns:
+                    close = sub["Close"].dropna()
+                    if len(close) >= 2:
+                        price = float(close.iloc[-1])
+                        prev = float(close.iloc[-2])
+                        chg = (price - prev) / prev * 100 if prev else None
+                    elif len(close) == 1:
+                        price = float(close.iloc[-1])
+            except Exception:
+                pass
+            out.append({
+                "name": name,
+                "symbol": sym,
+                "region": region,
+                "price": round(price, 2) if price is not None else None,
+                "change_pct": round(chg, 2) if chg is not None else None,
+            })
+        return out
+
     def fetch_all(self) -> dict:
         """
         Master fetch — get all data needed for pre-session analysis.
@@ -392,11 +466,14 @@ class GoldDataFetcher:
         print(f"  > FX rates ({name} in EUR / JPY / GBP)...")
         data["fx"] = self.fetch_fx_rates()
 
-        if self.asset_class == "crypto":
-            data["mcx"] = {}  # no MCX/India contract for crypto
+        if self.asset_class != "metal":
+            data["mcx"] = {}  # no MCX/India contract for crypto or indices
         else:
             print(f"  > {self.asset_cfg['mcx']['name']} / India data...")
             data["mcx"] = self.fetch_mcx_gold()
+
+        print("  > World indices snapshot...")
+        data["world_indices"] = self.fetch_world_indices()
         
         print("  > Cross-asset universe...")
         data["cross_assets"] = self.fetch_cross_assets()

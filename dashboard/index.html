@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pre-Session Analysis | Gold & Silver</title>
     <meta name="description" content="Institutional-grade gold & silver trading pre-session analysis dashboard. Technical analysis, macro scoring, sentiment, volatility, and trade setups.">
-    <link rel="stylesheet" href="styles.css?v=7">
+    <link rel="stylesheet" href="styles.css?v=9">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -29,14 +29,37 @@
                             <h1 id="header-title">Gold Pre-Session Analysis</h1>
                             <div class="subtitle" id="header-subtitle">XAU/USD & MCX Gold · Institutional Desk</div>
                         </div>
-                        <div class="asset-toggle" id="asset-toggle">
-                            <button class="asset-btn active" data-asset="gold">Au Gold</button>
-                            <button class="asset-btn" data-asset="silver">Ag Silver</button>
-                            <button class="asset-btn" data-asset="bitcoin">₿ BTC</button>
-                            <button class="asset-btn" data-asset="ethereum">Ξ ETH</button>
-                            <button class="asset-btn" data-asset="solana">◎ SOL</button>
-                            <button class="asset-btn" data-asset="bnb">⬡ BNB</button>
-                            <button class="asset-btn" data-asset="xrp">✕ XRP</button>
+                        <div class="asset-nav" id="asset-nav">
+                            <div class="asset-group" data-group="commodity">
+                                <button class="group-trigger" type="button">
+                                    <span class="gt-cat">Commodity</span><span class="gt-sel"></span><span class="caret">▾</span>
+                                </button>
+                                <div class="group-menu">
+                                    <button class="asset-btn" data-asset="gold">Au · Gold</button>
+                                    <button class="asset-btn" data-asset="silver">Ag · Silver</button>
+                                </div>
+                            </div>
+                            <div class="asset-group" data-group="crypto">
+                                <button class="group-trigger" type="button">
+                                    <span class="gt-cat">Crypto</span><span class="gt-sel"></span><span class="caret">▾</span>
+                                </button>
+                                <div class="group-menu">
+                                    <button class="asset-btn" data-asset="bitcoin">₿ Bitcoin</button>
+                                    <button class="asset-btn" data-asset="ethereum">Ξ Ethereum</button>
+                                    <button class="asset-btn" data-asset="solana">◎ Solana</button>
+                                    <button class="asset-btn" data-asset="bnb">⬡ BNB</button>
+                                    <button class="asset-btn" data-asset="xrp">✕ XRP</button>
+                                </div>
+                            </div>
+                            <div class="asset-group" data-group="index">
+                                <button class="group-trigger" type="button">
+                                    <span class="gt-cat">Index</span><span class="gt-sel"></span><span class="caret">▾</span>
+                                </button>
+                                <div class="group-menu">
+                                    <button class="asset-btn" data-asset="sp500">S&amp;P 500</button>
+                                    <button class="asset-btn" data-asset="nasdaq">Nasdaq 100</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="price-hero">
@@ -168,6 +191,19 @@
                     <div class="card-body">
                         <div id="vol-bars"></div>
                         <div id="vol-expected-range" class="mt-1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WORLD INDICES (global macro context, shown on every asset) -->
+            <div class="grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🌐 World Indices</h2>
+                        <span class="badge badge-info">Live · daily %</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="world-indices" class="indices-grid"></div>
                     </div>
                 </div>
             </div>
@@ -357,6 +393,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=10"></script>
 </body>
 </html>
