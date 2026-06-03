@@ -219,6 +219,69 @@ full toggle assets** (a third asset class, `index`).
 - S&P 500 tab: $7,600, US Cash Session, MES sizing, "Mildly Easy Conditions"
   macro, BULLISH regime green; MCX hidden, no gold/silver ratio. Nasdaq similar.
 
+## Commodities, Indian stocks & grouped navbar
+
+### Navbar sections
+The flat toggle is now four category dropdowns: **Commodity (8) · Crypto (5) ·
+Index (2) · Stock (20)**. Long lists (Stock) scroll. Active category shows the
+selected asset inline (e.g. "Stock · TCS"). Groups are defined in
+`asset_config.ASSET_GROUPS`. File resolution is generic
+(`assetFile(key)` → `session_data_<key>.json`, gold → `session_data.json`).
+
+### Commodity class (new) — Crude WTI, Brent, Natural Gas, Copper, Platinum, Palladium
+- `asset_config._commodity()`; `asset_class: "commodity"`, USD, futures-point
+  sizing (MCL/CL, NG, HG, PL, PA).
+- Cyclical/risk-on: VIX flipped in macro, no MCX, no gold/silver ratio, new
+  **Global Futures Session** (nearly 24h). Cross-assets: DXY/yields/SPY/VIX +
+  Gold/Crude/Copper.
+
+### Stock class (new) — 20 Nifty large-caps (Reliance, TCS, HDFC Bank, …)
+- `asset_config._stock()`; `asset_class: "stock"`, **currency `Rs.`**, NSE
+  tickers (`*.NS`), sized in shares, peer = Nifty 50.
+- **NSE Cash Session** (09:15–15:30 IST). Cross-assets: Nifty 50 / Sensex /
+  USD-INR / DXY / VIX / SPY / Gold. Risk-on macro.
+
+### Dynamic currency
+- `meta.currency` + `cur()` in `app.js`; all price displays use `cur()` so NSE
+  stocks render in **₹** (e.g. ₹2,244). The USD-based "FX priced-in" block and
+  its title suffix are hidden for non-USD assets.
+
+### Engine generalization
+The risk-on / non-metal branches in macro_scorer, correlation_engine,
+structure_engine and session_planner are now keyed on `asset_class != "metal"`
+(metals = safe-haven; everything else = risk-on/cyclical), so the four classes
+share one code path and new assets are config-only.
+
+### Verified (live preview)
+- 35 assets total, all pipelines exit 0. Navbar: Commodity 8 / Crypto 5 /
+  Index 2 / Stock 20.
+- TCS: ₹2,244, NSE Cash Session, "NSE Equity" subtitle, no MCX/ratio, "Scenarios"
+  (FX dropped), NEUTRAL → yellow. Crude: $95.51, Global Futures Session.
+- Note: an earlier transient `ASSET_FILES`/`DOMContentLoaded(event)` bug 404'd
+  the data; fixed via the generic `assetFile()` + string-guarded `loadData`.
+
+## Finviz-style World Indices + Day/Night theme
+
+### World Indices sparklines (Finviz-style)
+- `data_fetcher.fetch_world_indices()` now also returns an intraday `spark`
+  series per index (batched `period=1d, interval=5m`, downsampled to <=48 pts;
+  falls back to a few daily closes if intraday is unavailable).
+- Frontend `renderWorldIndices()` draws an inline-SVG sparkline per tile
+  (`sparkSvg()`), with the line/area/left-border coloured **green when up, red
+  when down** (CSS via `.index-cell.up/.down`), plus last price and daily %.
+  Tiles match Finviz's world-indices look.
+- The new `world_indices` (with `spark`) was patched into all 70 existing JSON
+  files (dashboard + output) without a full pipeline rerun.
+
+### Day / Night toggle
+- A theme button in the toolbar flips between dark (default) and a new **light
+  theme** (`body.theme-light` CSS-variable overrides). Choice persists in
+  `localStorage` (`dashTheme`) and is applied on load before first render.
+- Lightweight Charts are theme-aware via `themeColors()` (background / text /
+  grid / border); toggling re-renders the price chart + backtest equity curve
+  so their canvases match the theme. Semantic green/red/yellow are tuned darker
+  in light mode for contrast.
+
 ## Caveats / future tweaks
 - Pipeline **sentiment** parquet (Fear & Greed / news) is market-wide/gold-
   sourced; it's reused for silver as a market-sentiment proxy and labeled

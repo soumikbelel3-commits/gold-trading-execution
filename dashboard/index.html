@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pre-Session Analysis | Gold & Silver</title>
     <meta name="description" content="Institutional-grade gold & silver trading pre-session analysis dashboard. Technical analysis, macro scoring, sentiment, volatility, and trade setups.">
-    <link rel="stylesheet" href="styles.css?v=9">
+    <link rel="stylesheet" href="styles.css?v=12">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
@@ -37,6 +37,12 @@
                                 <div class="group-menu">
                                     <button class="asset-btn" data-asset="gold">Au · Gold</button>
                                     <button class="asset-btn" data-asset="silver">Ag · Silver</button>
+                                    <button class="asset-btn" data-asset="crude">Crude Oil (WTI)</button>
+                                    <button class="asset-btn" data-asset="brent">Brent Crude</button>
+                                    <button class="asset-btn" data-asset="natgas">Natural Gas</button>
+                                    <button class="asset-btn" data-asset="copper">Copper</button>
+                                    <button class="asset-btn" data-asset="platinum">Platinum</button>
+                                    <button class="asset-btn" data-asset="palladium">Palladium</button>
                                 </div>
                             </div>
                             <div class="asset-group" data-group="crypto">
@@ -60,6 +66,33 @@
                                     <button class="asset-btn" data-asset="nasdaq">Nasdaq 100</button>
                                 </div>
                             </div>
+                            <div class="asset-group" data-group="stock">
+                                <button class="group-trigger" type="button">
+                                    <span class="gt-cat">Stock</span><span class="gt-sel"></span><span class="caret">▾</span>
+                                </button>
+                                <div class="group-menu group-menu-scroll">
+                                    <button class="asset-btn" data-asset="reliance">Reliance</button>
+                                    <button class="asset-btn" data-asset="tcs">TCS</button>
+                                    <button class="asset-btn" data-asset="hdfcbank">HDFC Bank</button>
+                                    <button class="asset-btn" data-asset="icicibank">ICICI Bank</button>
+                                    <button class="asset-btn" data-asset="infosys">Infosys</button>
+                                    <button class="asset-btn" data-asset="hindunilvr">Hind. Unilever</button>
+                                    <button class="asset-btn" data-asset="itc">ITC</button>
+                                    <button class="asset-btn" data-asset="sbin">State Bank (SBI)</button>
+                                    <button class="asset-btn" data-asset="bhartiartl">Bharti Airtel</button>
+                                    <button class="asset-btn" data-asset="kotakbank">Kotak Bank</button>
+                                    <button class="asset-btn" data-asset="lt">Larsen &amp; Toubro</button>
+                                    <button class="asset-btn" data-asset="bajfinance">Bajaj Finance</button>
+                                    <button class="asset-btn" data-asset="axisbank">Axis Bank</button>
+                                    <button class="asset-btn" data-asset="asianpaint">Asian Paints</button>
+                                    <button class="asset-btn" data-asset="maruti">Maruti Suzuki</button>
+                                    <button class="asset-btn" data-asset="sunpharma">Sun Pharma</button>
+                                    <button class="asset-btn" data-asset="titan">Titan</button>
+                                    <button class="asset-btn" data-asset="wipro">Wipro</button>
+                                    <button class="asset-btn" data-asset="ultracemco">UltraTech Cement</button>
+                                    <button class="asset-btn" data-asset="nestleind">Nestle India</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="price-hero">
@@ -70,6 +103,7 @@
                         <span class="session-badge" id="active-session">--</span>
                         <span class="timestamp" id="timestamp">--</span>
                         <div class="toolbar">
+                            <button class="tool-btn" id="theme-btn" title="Toggle day / night">🌙 Dark</button>
                             <button class="tool-btn" id="refresh-btn" title="Reload latest data">⟳ Refresh</button>
                             <button class="tool-btn" id="print-btn" title="Print / export session briefing">⎙ Export</button>
                             <label class="autorefresh"><input type="checkbox" id="autorefresh-toggle"> Auto</label>
@@ -393,6 +427,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=15"></script>
 </body>
 </html>

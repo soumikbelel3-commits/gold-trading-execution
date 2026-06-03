@@ -30,6 +30,12 @@ class GoldCorrelationEngine:
         "VIX": "VIX",
         "GLD_ETF": "Gold ETF (GLD)",
         "SLV_ETF": "Silver ETF (SLV)",
+        "Copper": "Copper (HG)",
+        "Brent": "Brent (BZ)",
+        "WTI": "WTI Crude (CL)",
+        "Nifty50": "Nifty 50",
+        "Sensex": "Sensex",
+        "USDINR": "USD/INR",
     }
 
     def __init__(self, gold_daily: pd.DataFrame, cross_assets: dict,
@@ -152,13 +158,14 @@ class GoldCorrelationEngine:
         btc_corr = corr_30d.get("BTC", 0)
         name = self.name
 
-        # Risk-ON assets (crypto, equity indices) — frame the regime around
-        # equities/USD, not safe havens.
-        if self.asset_class in ("crypto", "index"):
+        # Risk-ON / cyclical assets (crypto, indices, stocks, commodities) —
+        # frame the regime around equities/USD, not safe havens.
+        if self.asset_class != "metal":
             equity_corr = max(spy_corr, qqq_corr,
                               corr_30d.get("DowJones", 0),
                               corr_30d.get("Nasdaq", 0),
-                              corr_30d.get("S&P500", 0))
+                              corr_30d.get("S&P500", 0),
+                              corr_30d.get("Nifty50", 0))
             if equity_corr > 0.5:
                 return f"Risk-On ({name} tracking equities)"
             elif dxy_corr < -0.4:

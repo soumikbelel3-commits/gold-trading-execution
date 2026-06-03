@@ -243,6 +243,7 @@ def run_analysis(asset_key: str = DEFAULT_ASSET) -> dict:
             "asset_symbol": cfg["symbol"],
             "asset_logo": cfg["logo"],
             "asset_class": cfg.get("asset_class", "metal"),
+            "currency": cfg.get("currency", "$"),
         },
         "technical": technical,
         "macro": macro,

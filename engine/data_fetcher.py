@@ -103,6 +103,36 @@ class GoldDataFetcher:
             }
             cross.setdefault(peer["key"], peer["ticker"])
             self.cross_assets = cross
+        elif self.asset_class == "commodity":
+            # Cyclical commodity: USD, growth (SPY), risk (VIX), and peer
+            # commodities for context.
+            peer = self.asset_cfg.get("peer", {"key": "Gold", "ticker": "GC=F"})
+            cross = {
+                "DXY": "DX-Y.NYB",
+                "US10Y": "^TNX",
+                "SPY": "SPY",
+                "VIX": "^VIX",
+                "Gold": "GC=F",
+                "CrudeOil": "CL=F",
+                "Copper": "HG=F",
+            }
+            cross.setdefault(peer["key"], peer["ticker"])
+            self.cross_assets = cross
+        elif self.asset_class == "stock":
+            # Indian equity: Nifty/Sensex benchmarks, USDINR, US risk proxies.
+            peer = self.asset_cfg.get("peer", {"key": "Nifty50", "ticker": "^NSEI"})
+            cross = {
+                "DXY": "DX-Y.NYB",
+                "US10Y": "^TNX",
+                "SPY": "SPY",
+                "VIX": "^VIX",
+                "Nifty50": "^NSEI",
+                "Sensex": "^BSESN",
+                "USDINR": "USDINR=X",
+                "Gold": "GC=F",
+            }
+            cross.setdefault(peer["key"], peer["ticker"])
+            self.cross_assets = cross
         else:
             # Metals: the "other metal" (silver for gold, gold for silver) is
             # included so the gold/silver ratio + correlation panel work.
@@ -406,42 +436,73 @@ class GoldDataFetcher:
     
     def fetch_world_indices(self) -> list:
         """
-        Snapshot of major global equity indices for the World Indices panel.
-        One batched download; returns [{name, symbol, region, price, change_pct}].
+        Snapshot of major global equity indices for the World Indices panel,
+        Finviz-style: last price, daily % change, and an intraday sparkline of
+        the latest session. Two batched downloads (daily for %, intraday for the
+        sparkline).
+        Returns [{name, symbol, region, price, change_pct, spark[]}].
         """
         symbols = [s for _, s, _ in WORLD_INDICES]
-        df = None
+        daily = intra = None
         try:
-            df = yf.download(" ".join(symbols), period="7d", interval="1d",
-                             progress=False, group_by="ticker")
+            daily = yf.download(" ".join(symbols), period="7d", interval="1d",
+                                progress=False, group_by="ticker")
         except Exception as e:
-            print(f"  WARNING: World indices fetch error: {e}")
+            print(f"  WARNING: World indices (daily) error: {e}")
+        try:
+            intra = yf.download(" ".join(symbols), period="1d", interval="5m",
+                                progress=False, group_by="ticker")
+        except Exception as e:
+            print(f"  WARNING: World indices (intraday) error: {e}")
+
+        def _closes(df, sym):
+            try:
+                if df is None:
+                    return None
+                if isinstance(df.columns, pd.MultiIndex):
+                    if sym not in df.columns.get_level_values(0):
+                        return None
+                    sub = df[sym]
+                else:
+                    sub = df  # single-ticker fallback
+                if "Close" not in sub.columns:
+                    return None
+                return sub["Close"].dropna()
+            except Exception:
+                return None
 
         out = []
         for name, sym, region in WORLD_INDICES:
-            price, chg = None, None
-            try:
-                sub = None
-                if df is not None and isinstance(df.columns, pd.MultiIndex) and sym in df.columns.get_level_values(0):
-                    sub = df[sym]
-                elif df is not None and not isinstance(df.columns, pd.MultiIndex):
-                    sub = df  # single-ticker fallback
-                if sub is not None and "Close" in sub.columns:
-                    close = sub["Close"].dropna()
-                    if len(close) >= 2:
-                        price = float(close.iloc[-1])
-                        prev = float(close.iloc[-2])
-                        chg = (price - prev) / prev * 100 if prev else None
-                    elif len(close) == 1:
-                        price = float(close.iloc[-1])
-            except Exception:
-                pass
+            price, chg, spark = None, None, []
+            dclose = _closes(daily, sym)
+            if dclose is not None and len(dclose) >= 2:
+                price = float(dclose.iloc[-1])
+                prev = float(dclose.iloc[-2])
+                chg = (price - prev) / prev * 100 if prev else None
+            elif dclose is not None and len(dclose) == 1:
+                price = float(dclose.iloc[-1])
+
+            # Intraday sparkline (downsampled to <= 48 points).
+            iclose = _closes(intra, sym)
+            if iclose is not None and len(iclose) >= 3:
+                vals = [float(x) for x in iclose.tolist()]
+                if len(vals) > 48:
+                    step = max(1, len(vals) // 48)
+                    vals = vals[::step]
+                spark = [round(v, 2) for v in vals]
+                if price is None:
+                    price = spark[-1]
+            elif dclose is not None and len(dclose) >= 3:
+                # Fall back to a few daily closes if intraday is unavailable.
+                spark = [round(float(x), 2) for x in dclose.tail(7).tolist()]
+
             out.append({
                 "name": name,
                 "symbol": sym,
                 "region": region,
                 "price": round(price, 2) if price is not None else None,
                 "change_pct": round(chg, 2) if chg is not None else None,
+                "spark": spark,
             })
         return out
 
