@@ -92,6 +92,36 @@ class GoldSessionPlanner:
         },
     }
 
+    # Commodity futures trade nearly 24h (CME/ICE) with a daily settlement.
+    COMMODITY_SESSIONS = {
+        "Global Futures Session": {
+            "start_utc": 0,
+            "end_utc": 24,
+            "characteristics": [
+                "Futures trade nearly 24h (CME/ICE) with a daily settlement",
+                "Liquidity peaks during the US/London overlap (~13:00-17:00 UTC)",
+                "Inventory/EIA, OPEC and geopolitical headlines drive sharp moves",
+                "A stronger USD is a broad headwind across commodities",
+            ],
+            "volatility_rank": "High",
+        },
+    }
+
+    # Indian equities trade the NSE/BSE cash session.
+    STOCK_SESSIONS = {
+        "NSE Cash Session": {
+            "start_utc": 3.75,   # 09:15 IST
+            "end_utc": 10.0,     # 15:30 IST
+            "characteristics": [
+                "NSE/BSE cash 09:15-15:30 IST (03:45-10:00 UTC)",
+                "Pre-open auction 09:00-09:15 IST sets the opening print",
+                "Global cues (US close, GIFT Nifty) drive the opening gap",
+                "Stock-specific: earnings, results, sector and FII/DII flows",
+            ],
+            "volatility_rank": "Medium-High",
+        },
+    }
+
     def __init__(self, technical: dict, macro: dict, volatility: dict,
                  composite_signal: dict, mcx_data: dict = None,
                  asset_cfg: dict = None):
@@ -118,6 +148,14 @@ class GoldSessionPlanner:
             sessions_map = self.INDEX_SESSIONS
             primary_session = "US Cash Session"
             next_sess = {"name": "US Cash Session", "hours_until": 0}
+        elif self.asset_class == "commodity":
+            sessions_map = self.COMMODITY_SESSIONS
+            primary_session = "Global Futures Session"
+            next_sess = {"name": "Global Futures Session", "hours_until": 0}
+        elif self.asset_class == "stock":
+            sessions_map = self.STOCK_SESSIONS
+            primary_session = "NSE Cash Session"
+            next_sess = {"name": "NSE Cash Session", "hours_until": 0}
         else:
             sessions_map = self.SESSIONS
             primary_session = None
@@ -189,7 +227,8 @@ class GoldSessionPlanner:
         current_price = self.technical.get("current_price", 0)
         
         # Session-specific bias
-        if name in ("24/7 Global Market", "US Cash Session"):
+        if name in ("24/7 Global Market", "US Cash Session",
+                    "Global Futures Session", "NSE Cash Session"):
             if signal_val > 0.2:
                 plan["bias"] = "Bullish bias — buy dips"
                 plan["strategy"] = "Accumulate on pullbacks to support; momentum favors longs"

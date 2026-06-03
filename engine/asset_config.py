@@ -149,8 +149,90 @@ ASSETS.update({
                      {"key": "S&P500", "ticker": "^GSPC"}, "Micro Nasdaq (MNQ)", 2, 20),
 })
 
+
+# ── Non-precious commodities ───────────────────────────────────────
+# Cyclical/inflation commodities (energy, industrial metals). No MCX, no
+# gold/silver ratio. Treated as risk-on for the VIX factor (risk-off = demand
+# fear). USD-denominated. Sized in futures points ($ P&L per $1.00 move).
+def _commodity(key, name, symbol, logo, ticker, peer, micro_label, micro_pv, std_pv):
+    return {
+        "key": key, "name": name, "symbol": symbol, "logo": logo,
+        "asset_class": "commodity", "ticker": ticker, "peer": peer,
+        "futures": {"micro_label": micro_label, "micro_point_value": micro_pv,
+                    "standard_point_value": std_pv},
+        "output_file": f"session_data_{key}.json",
+    }
+
+
+# ── Indian equities (Nifty large-caps) ─────────────────────────────
+# Risk-on equities priced in INR. No MCX, no gold/silver ratio. NSE cash
+# session. Sized in shares. Peer = Nifty 50 index.
+def _stock(key, name, symbol, logo, ticker):
+    return {
+        "key": key, "name": name, "symbol": symbol, "logo": logo,
+        "asset_class": "stock", "ticker": ticker, "currency": "Rs.",
+        "peer": {"key": "Nifty50", "ticker": "^NSEI"},
+        "futures": {"micro_label": "Shares", "micro_point_value": 1,
+                    "standard_point_value": 1},
+        "output_file": f"session_data_{key}.json",
+    }
+
+
+ASSETS.update({
+    "crude":     _commodity("crude",     "Crude Oil (WTI)", "WTI",     "WTI", "CL=F", {"key": "Brent", "ticker": "BZ=F"}, "Micro WTI (MCL)", 100, 1000),
+    "brent":     _commodity("brent",     "Brent Crude",     "BRENT",   "BRT", "BZ=F", {"key": "WTI", "ticker": "CL=F"},   "Brent (BZ)",      100, 1000),
+    "natgas":    _commodity("natgas",    "Natural Gas",     "NATGAS",  "NG",  "NG=F", {"key": "WTI", "ticker": "CL=F"},   "Henry Hub (NG)",  2500, 10000),
+    "copper":    _commodity("copper",    "Copper",          "COPPER",  "Cu",  "HG=F", {"key": "Gold", "ticker": "GC=F"},  "Copper (HG)",     2500, 25000),
+    "platinum":  _commodity("platinum",  "Platinum",        "XPT/USD", "Pt",  "PL=F", {"key": "Gold", "ticker": "GC=F"},  "Platinum (PL)",   10, 50),
+    "palladium": _commodity("palladium", "Palladium",       "XPD/USD", "Pd",  "PA=F", {"key": "Gold", "ticker": "GC=F"},  "Palladium (PA)",  10, 100),
+})
+
+ASSETS.update({
+    "reliance":   _stock("reliance",   "Reliance",        "RELIANCE",   "REL",  "RELIANCE.NS"),
+    "tcs":        _stock("tcs",        "TCS",             "TCS",        "TCS",  "TCS.NS"),
+    "hdfcbank":   _stock("hdfcbank",   "HDFC Bank",       "HDFCBANK",   "HDFC", "HDFCBANK.NS"),
+    "icicibank":  _stock("icicibank",  "ICICI Bank",      "ICICIBANK",  "ICICI","ICICIBANK.NS"),
+    "infosys":    _stock("infosys",    "Infosys",         "INFY",       "INFY", "INFY.NS"),
+    "hindunilvr": _stock("hindunilvr", "Hind. Unilever",  "HINDUNILVR", "HUL",  "HINDUNILVR.NS"),
+    "itc":        _stock("itc",        "ITC",             "ITC",        "ITC",  "ITC.NS"),
+    "sbin":       _stock("sbin",       "State Bank (SBI)","SBIN",       "SBI",  "SBIN.NS"),
+    "bhartiartl": _stock("bhartiartl", "Bharti Airtel",   "BHARTIARTL", "BHRT", "BHARTIARTL.NS"),
+    "kotakbank":  _stock("kotakbank",  "Kotak Bank",      "KOTAKBANK",  "KTK",  "KOTAKBANK.NS"),
+    "lt":         _stock("lt",         "Larsen & Toubro", "LT",         "L&T",  "LT.NS"),
+    "bajfinance": _stock("bajfinance", "Bajaj Finance",   "BAJFINANCE", "BAJ",  "BAJFINANCE.NS"),
+    "axisbank":   _stock("axisbank",   "Axis Bank",       "AXISBANK",   "AXIS", "AXISBANK.NS"),
+    "asianpaint": _stock("asianpaint", "Asian Paints",    "ASIANPAINT", "APNT", "ASIANPAINT.NS"),
+    "maruti":     _stock("maruti",     "Maruti Suzuki",   "MARUTI",     "MRTI", "MARUTI.NS"),
+    "sunpharma":  _stock("sunpharma",  "Sun Pharma",      "SUNPHARMA",  "SUN",  "SUNPHARMA.NS"),
+    "titan":      _stock("titan",      "Titan",           "TITAN",      "TITN", "TITAN.NS"),
+    "wipro":      _stock("wipro",      "Wipro",           "WIPRO",      "WIPR", "WIPRO.NS"),
+    "ultracemco": _stock("ultracemco", "UltraTech Cement","ULTRACEMCO", "UTCL", "ULTRACEMCO.NS"),
+    "nestleind":  _stock("nestleind",  "Nestle India",    "NESTLEIND",  "NEST", "NESTLEIND.NS"),
+})
+
 # Order in which assets appear in the dashboard toggle / pipeline runs.
-ASSET_ORDER = ["gold", "silver", "bitcoin", "ethereum", "solana", "bnb", "xrp",
-               "sp500", "nasdaq"]
+ASSET_ORDER = (
+    ["gold", "silver"]
+    + ["crude", "brent", "natgas", "copper", "platinum", "palladium"]
+    + ["bitcoin", "ethereum", "solana", "bnb", "xrp"]
+    + ["sp500", "nasdaq"]
+    + ["reliance", "tcs", "hdfcbank", "icicibank", "infosys", "hindunilvr",
+       "itc", "sbin", "bhartiartl", "kotakbank", "lt", "bajfinance", "axisbank",
+       "asianpaint", "maruti", "sunpharma", "titan", "wipro", "ultracemco", "nestleind"]
+)
+
+# Asset groups for the dashboard navbar dropdowns.
+ASSET_GROUPS = [
+    {"key": "commodity", "label": "Commodity",
+     "assets": ["gold", "silver", "crude", "brent", "natgas", "copper", "platinum", "palladium"]},
+    {"key": "crypto", "label": "Crypto",
+     "assets": ["bitcoin", "ethereum", "solana", "bnb", "xrp"]},
+    {"key": "index", "label": "Index",
+     "assets": ["sp500", "nasdaq"]},
+    {"key": "stock", "label": "Stock",
+     "assets": ["reliance", "tcs", "hdfcbank", "icicibank", "infosys", "hindunilvr",
+                "itc", "sbin", "bhartiartl", "kotakbank", "lt", "bajfinance", "axisbank",
+                "asianpaint", "maruti", "sunpharma", "titan", "wipro", "ultracemco", "nestleind"]},
+]
 
 DEFAULT_ASSET = "gold"

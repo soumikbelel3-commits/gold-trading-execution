@@ -79,7 +79,7 @@ class GoldMacroScorer:
         result["normalized_score"] = round(total / result["max_possible"], 4)
         
         # Regime classification
-        if self.asset_class in ("crypto", "index"):
+        if self.asset_class != "metal":
             # Honest framing: this is a USD/rates/risk *financial-conditions*
             # read, not a metals-style safe-haven call. Easy conditions (weak
             # USD, low yields, low VIX) are a risk-on tailwind for risk assets.
@@ -178,9 +178,11 @@ class GoldMacroScorer:
         if self.vix is None:
             return 0, "No VIX data"
 
-        # Risk-ON assets (crypto, equity indices): high VIX (fear/risk-off) is a
-        # HEADWIND, the opposite of gold's safe-haven bid. Flip sign + wording.
-        if self.asset_class in ("crypto", "index"):
+        # Risk-ON / cyclical assets (crypto, indices, stocks, commodities):
+        # high VIX (fear/risk-off) is a HEADWIND, the opposite of gold's
+        # safe-haven bid. Flip sign + wording. Only precious metals keep the
+        # safe-haven interpretation.
+        if self.asset_class != "metal":
             if self.vix > 35:
                 return -2, f"VIX at {self.vix:.1f} — extreme fear, risk-off hammers risk assets"
             elif self.vix > 28:

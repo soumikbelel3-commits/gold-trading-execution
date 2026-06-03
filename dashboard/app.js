@@ -10,17 +10,10 @@ let chart = null;
 let candleSeries = null;
 
 // ── Asset selection ──
-const ASSET_FILES = {
-    gold: 'session_data.json',
-    silver: 'session_data_silver.json',
-    bitcoin: 'session_data_bitcoin.json',
-    ethereum: 'session_data_ethereum.json',
-    solana: 'session_data_solana.json',
-    bnb: 'session_data_bnb.json',
-    xrp: 'session_data_xrp.json',
-    sp500: 'session_data_sp500.json',
-    nasdaq: 'session_data_nasdaq.json',
-};
+// Gold uses the legacy filename; every other asset is session_data_<key>.json.
+function assetFile(asset) {
+    return asset === 'gold' ? 'session_data.json' : 'session_data_' + asset + '.json';
+}
 let currentAsset = 'gold';
 
 // Name of the active asset, used in dynamically-built labels.
@@ -29,11 +22,39 @@ function metal() { return (DATA && DATA.meta && DATA.meta.asset_name) || 'Gold';
 function assetClass() { return (DATA && DATA.meta && DATA.meta.asset_class) || 'metal'; }
 function isMetal() { return assetClass() === 'metal'; }
 function isCrypto() { return assetClass() === 'crypto'; }
+// Price currency symbol for the active asset ($ default, Rs. for NSE stocks).
+function cur() { return (DATA && DATA.meta && DATA.meta.currency) || '$'; }
+
+// ── Theme (day / night) ──
+let currentTf = 'daily';   // active price-chart timeframe (for re-render on theme switch)
+function themeColors() {
+    const light = document.body.classList.contains('theme-light');
+    return light
+        ? { bg: '#FFFFFF', text: '#54585F', grid: 'rgba(0,0,0,0.06)', border: 'rgba(0,0,0,0.12)' }
+        : { bg: '#0C0C0E', text: '#8B8B8E', grid: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.06)' };
+}
+function applyTheme(theme) {
+    document.body.classList.toggle('theme-light', theme === 'light');
+    const btn = document.getElementById('theme-btn');
+    if (btn) btn.textContent = theme === 'light' ? '☀ Day' : '🌙 Dark';
+}
+function initTheme() {
+    let t = 'dark';
+    try { t = localStorage.getItem('dashTheme') || 'dark'; } catch (e) {}
+    applyTheme(t);
+}
+function toggleTheme() {
+    const next = document.body.classList.contains('theme-light') ? 'dark' : 'light';
+    try { localStorage.setItem('dashTheme', next); } catch (e) {}
+    applyTheme(next);
+    // Re-render the canvas charts so their backgrounds match the theme.
+    if (DATA) { renderChart(currentTf); renderBacktest(); }
+}
 
 // ── Load Data ──
 async function loadData(asset) {
-    if (asset) currentAsset = asset;
-    const file = ASSET_FILES[currentAsset] || ASSET_FILES.gold;
+    if (typeof asset === 'string') currentAsset = asset;
+    const file = assetFile(currentAsset);
     try {
         const response = await fetch(file + '?t=' + Date.now());
         if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -98,6 +119,8 @@ function applyAssetLabels() {
 
     const subtitle = cls === 'crypto' ? `${sym} · 24/7 Crypto · Institutional Desk`
         : cls === 'index' ? `${sym} · Equity Index · Institutional Desk`
+        : cls === 'commodity' ? `${sym} · Commodity Futures · Institutional Desk`
+        : cls === 'stock' ? `${sym} · NSE Equity · Institutional Desk`
         : `${sym} & MCX ${m} · Institutional Desk`;
 
     document.title = `${m} Pre-Session Analysis | ${sym}`;
@@ -105,7 +128,8 @@ function applyAssetLabels() {
     set('header-title', `${m} Pre-Session Analysis`);
     set('header-subtitle', subtitle);
     set('chart-title', `📈 ${m} Price Chart`);
-    set('scenarios-title', `🌍 Scenarios & ${m} in FX`);
+    // FX-priced-in only makes sense for USD-quoted assets.
+    set('scenarios-title', (meta.currency || '$') === '$' ? `🌍 Scenarios & ${m} in FX` : `🌍 ${m} Scenarios`);
     set('footer-text',
         `${m} Pre-Session Analysis Dashboard · Data from yfinance & Quant Research Pipeline · ` +
         `For educational & research purposes only · Not financial advice`);
@@ -184,7 +208,7 @@ function renderHeader() {
     
     // Price
     const price = tech.current_price;
-    document.getElementById('hero-price').textContent = price ? `$${price.toFixed(2)}` : '$---';
+    document.getElementById('hero-price').textContent = price ? `${cur()}${price.toFixed(2)}` : '$---';
     
     // Change
     const change = tech.daily_change || 0;
@@ -276,6 +300,7 @@ function renderSignalBar() {
 // CANDLESTICK CHART
 // ═══════════════════════════════════════
 function renderChart(timeframe) {
+    currentTf = timeframe;
     const container = document.getElementById('price-chart');
     container.innerHTML = '';
     
@@ -285,30 +310,31 @@ function renderChart(timeframe) {
         return;
     }
     
+    const tc = themeColors();
     chart = LightweightCharts.createChart(container, {
         width: container.clientWidth,
         height: 400,
         layout: {
-            background: { type: 'solid', color: '#0C0C0E' },
-            textColor: '#8B8B8E',
+            background: { type: 'solid', color: tc.bg },
+            textColor: tc.text,
             fontSize: 11,
             fontFamily: 'Inter, sans-serif',
         },
         grid: {
-            vertLines: { color: 'rgba(255,255,255,0.03)' },
-            horzLines: { color: 'rgba(255,255,255,0.03)' },
+            vertLines: { color: tc.grid },
+            horzLines: { color: tc.grid },
         },
         crosshair: {
             mode: LightweightCharts.CrosshairMode.Normal,
-            vertLine: { color: 'rgba(76, 194, 255, 0.15)', labelBackgroundColor: '#4CC2FF' },
-            horzLine: { color: 'rgba(76, 194, 255, 0.15)', labelBackgroundColor: '#4CC2FF' },
+            vertLine: { color: 'rgba(76, 194, 255, 0.25)', labelBackgroundColor: '#4CC2FF' },
+            horzLine: { color: 'rgba(76, 194, 255, 0.25)', labelBackgroundColor: '#4CC2FF' },
         },
         timeScale: {
-            borderColor: 'rgba(255,255,255,0.06)',
+            borderColor: tc.border,
             timeVisible: timeframe === '1h',
         },
         rightPriceScale: {
-            borderColor: 'rgba(255,255,255,0.06)',
+            borderColor: tc.border,
         },
     });
     
@@ -410,7 +436,7 @@ function renderKeyLevels() {
         <div class="level-item level-${item.type}">
             <span class="level-label">${item.label}</span>
             <span class="level-value ${item.type === 'resistance' ? 'text-red' : 'text-green'}">
-                $${item.value?.toFixed(2) || '--'}
+                ${cur()}${item.value?.toFixed(2) || '--'}
             </span>
         </div>
     `).join('');
@@ -441,7 +467,7 @@ function renderKeyLevels() {
     fibContainer.innerHTML = fibItems.map(item => `
         <div class="level-item level-fib">
             <span class="level-label">${item.label}</span>
-            <span class="level-value text-gold">$${item.value?.toFixed(2) || '--'}</span>
+            <span class="level-value text-gold">${cur()}${item.value?.toFixed(2) || '--'}</span>
         </div>
     `).join('');
 }
@@ -808,9 +834,9 @@ function renderVolatility() {
             <div style="padding:10px; background:var(--bg-elevated); border-radius:var(--radius-xs);">
                 <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;">Expected Daily Range (ATR-14)</div>
                 <div class="flex-between">
-                    <span class="text-green font-mono" style="font-size:0.85rem;">$${range.expected_low?.toFixed(2)}</span>
-                    <span class="text-gold font-mono font-bold" style="font-size:0.85rem;">$${range.atr_14?.toFixed(2)}</span>
-                    <span class="text-red font-mono" style="font-size:0.85rem;">$${range.expected_high?.toFixed(2)}</span>
+                    <span class="text-green font-mono" style="font-size:0.85rem;">${cur()}${range.expected_low?.toFixed(2)}</span>
+                    <span class="text-gold font-mono font-bold" style="font-size:0.85rem;">${cur()}${range.atr_14?.toFixed(2)}</span>
+                    <span class="text-red font-mono" style="font-size:0.85rem;">${cur()}${range.expected_high?.toFixed(2)}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; font-size:0.6rem; color:var(--text-muted); margin-top:2px;">
                     <span>Expected Low</span>
@@ -852,7 +878,7 @@ function renderIchimoku() {
             <div class="ichimoku-item">
                 <span style="font-size:0.75rem; color:var(--text-secondary);">${item.label}</span>
                 <span class="font-mono" style="font-size:0.8rem; font-weight:600; color:${color};">
-                    ${item.isSignal ? item.value : '$' + item.value?.toFixed(2)}
+                    ${item.isSignal ? item.value : cur() +item.value?.toFixed(2)}
                 </span>
             </div>
         `;
@@ -886,7 +912,7 @@ function renderPivotPoints(type) {
         return `
             <div class="level-item level-${levelType}">
                 <span class="level-label">${key}</span>
-                <span class="level-value ${color}">$${val.toFixed(2)}</span>
+                <span class="level-value ${color}">${cur()}${val.toFixed(2)}</span>
             </div>
         `;
     }).join('');
@@ -1025,9 +1051,9 @@ function renderTradeSetups() {
                 <span style="font-size:0.78rem; font-weight:700; color:${actColor};">${sig.action || '--'} · ${((sig.confidence || 0) * 100).toFixed(0)}%</span>
             </div>
             <div class="trade-levels" style="margin:0;">
-                <div class="trade-level"><div class="label">Break Above</div><div class="price text-green">${nearestRes ? '$' + nearestRes.center.toFixed(0) : '—'}</div></div>
-                <div class="trade-level"><div class="label">Spot</div><div class="price text-gold">${price ? '$' + price.toFixed(0) : '—'}</div></div>
-                <div class="trade-level"><div class="label">Break Below</div><div class="price text-red">${nearestSup ? '$' + nearestSup.center.toFixed(0) : '—'}</div></div>
+                <div class="trade-level"><div class="label">Break Above</div><div class="price text-green">${nearestRes ? cur() +nearestRes.center.toFixed(0) : '—'}</div></div>
+                <div class="trade-level"><div class="label">Spot</div><div class="price text-gold">${price ? cur() +price.toFixed(0) : '—'}</div></div>
+                <div class="trade-level"><div class="label">Break Below</div><div class="price text-red">${nearestSup ? cur() +nearestSup.center.toFixed(0) : '—'}</div></div>
             </div>
         </div>`;
 
@@ -1046,19 +1072,19 @@ function renderTradeSetups() {
                 <div class="trade-levels">
                     <div class="trade-level">
                         <div class="label">Entry</div>
-                        <div class="price text-gold">$${setup.entry?.toFixed(2)}</div>
+                        <div class="price text-gold">${cur()}${setup.entry?.toFixed(2)}</div>
                     </div>
                     <div class="trade-level">
                         <div class="label">Stop Loss</div>
-                        <div class="price text-red">$${setup.stop_loss?.toFixed(2)}</div>
+                        <div class="price text-red">${cur()}${setup.stop_loss?.toFixed(2)}</div>
                     </div>
                     <div class="trade-level">
                         <div class="label">Target 1</div>
-                        <div class="price text-green">$${setup.target_1?.toFixed(2)}</div>
+                        <div class="price text-green">${cur()}${setup.target_1?.toFixed(2)}</div>
                     </div>
                     <div class="trade-level">
                         <div class="label">Target 2</div>
-                        <div class="price text-green">$${setup.target_2?.toFixed(2)}</div>
+                        <div class="price text-green">${cur()}${setup.target_2?.toFixed(2)}</div>
                     </div>
                 </div>
             `;
@@ -1067,11 +1093,11 @@ function renderTradeSetups() {
                 <div class="trade-levels">
                     <div class="trade-level">
                         <div class="label">Buy Zone</div>
-                        <div class="price text-green">$${setup.buy_zone?.toFixed(2)}</div>
+                        <div class="price text-green">${cur()}${setup.buy_zone?.toFixed(2)}</div>
                     </div>
                     <div class="trade-level">
                         <div class="label">Sell Zone</div>
-                        <div class="price text-red">$${setup.sell_zone?.toFixed(2)}</div>
+                        <div class="price text-red">${cur()}${setup.sell_zone?.toFixed(2)}</div>
                     </div>
                 </div>
             `;
@@ -1108,15 +1134,15 @@ function renderRiskParams() {
         <div class="risk-grid" style="margin-bottom:14px;">
             <div class="risk-item">
                 <div class="label">ATR (14)</div>
-                <div class="value text-gold">$${risk.atr_14?.toFixed(2) || '--'}</div>
+                <div class="value text-gold">${cur()}${risk.atr_14?.toFixed(2) || '--'}</div>
             </div>
             <div class="risk-item">
                 <div class="label">Tight Stop (0.5 ATR)</div>
-                <div class="value text-red">$${risk.stop_tight?.toFixed(2) || '--'}</div>
+                <div class="value text-red">${cur()}${risk.stop_tight?.toFixed(2) || '--'}</div>
             </div>
             <div class="risk-item">
                 <div class="label">Normal Stop (1 ATR)</div>
-                <div class="value text-red">$${risk.stop_normal?.toFixed(2) || '--'}</div>
+                <div class="value text-red">${cur()}${risk.stop_normal?.toFixed(2) || '--'}</div>
             </div>
         </div>
     `;
@@ -1127,15 +1153,15 @@ function renderRiskParams() {
         <div class="risk-grid" style="margin-bottom:14px;">
             <div class="risk-item">
                 <div class="label">1R Target</div>
-                <div class="value text-green">$${risk.target_1r?.toFixed(2) || '--'}</div>
+                <div class="value text-green">${cur()}${risk.target_1r?.toFixed(2) || '--'}</div>
             </div>
             <div class="risk-item">
                 <div class="label">2R Target</div>
-                <div class="value text-green">$${risk.target_2r?.toFixed(2) || '--'}</div>
+                <div class="value text-green">${cur()}${risk.target_2r?.toFixed(2) || '--'}</div>
             </div>
             <div class="risk-item">
                 <div class="label">3R Target</div>
-                <div class="value text-green">$${risk.target_3r?.toFixed(2) || '--'}</div>
+                <div class="value text-green">${cur()}${risk.target_3r?.toFixed(2) || '--'}</div>
             </div>
         </div>
     `;
@@ -1151,8 +1177,8 @@ function renderRiskParams() {
         if (!s) return;
         html += `
             <tr>
-                <td>$${(size/1000)}K</td>
-                <td>$${s.risk_per_trade_1pct?.toFixed(0)}</td>
+                <td>${cur()}${(size/1000)}K</td>
+                <td>${cur()}${s.risk_per_trade_1pct?.toFixed(0)}</td>
                 <td style="color:var(--gold-light)">${s.micro_gold_contracts?.toFixed(1)} lots</td>
                 <td>${s.standard_gold_contracts?.toFixed(2)} lots</td>
             </tr>
@@ -1271,11 +1297,11 @@ function renderMonteCarlo() {
     const p = mc.percentiles || {};
     let html = `
         <div style="font-size:0.65rem; color:var(--text-muted); margin-bottom:6px;">
-            ${mc.n_sims.toLocaleString()} simulations · spot $${mc.spot} · daily σ ${mc.daily_vol_pct}%
+            ${mc.n_sims.toLocaleString()} simulations · spot ${cur()}${mc.spot} · daily σ ${mc.daily_vol_pct}%
         </div>
         <div class="mc-pctl-grid">
             ${[['5th', p.p5, 'var(--red)'], ['25th', p.p25, 'var(--amber)'], ['50th', p.p50, 'var(--text-primary)'], ['75th', p.p75, 'var(--amber)'], ['95th', p.p95, 'var(--green)']]
-                .map(([lbl, v, c]) => `<div class="mc-pctl"><div class="p">${lbl}</div><div class="pv" style="color:${c}">$${v != null ? v.toFixed(0) : '--'}</div></div>`).join('')}
+                .map(([lbl, v, c]) => `<div class="mc-pctl"><div class="p">${lbl}</div><div class="pv" style="color:${c}">${cur()}${v != null ? v.toFixed(0) : '--'}</div></div>`).join('')}
         </div>
     `;
 
@@ -1289,10 +1315,10 @@ function renderMonteCarlo() {
             const edgeLow = hist.edges[i], edgeHigh = hist.edges[i + 1];
             const inBand = edgeHigh >= band.low && edgeLow <= band.high;
             const h = maxC > 0 ? (c / maxC * 100) : 0;
-            html += `<div class="mc-hist-bar ${inBand ? 'in-band' : ''}" style="height:${h}%" title="$${edgeLow.toFixed(0)}–$${edgeHigh.toFixed(0)}"></div>`;
+            html += `<div class="mc-hist-bar ${inBand ? 'in-band' : ''}" style="height:${h}%" title="${cur()}${edgeLow.toFixed(0)}–${cur()}${edgeHigh.toFixed(0)}"></div>`;
         });
         html += `</div>`;
-        html += `<div class="mc-band-labels"><span>$${hist.edges[0].toFixed(0)}</span><span style="color:var(--gold-light)">1σ band $${band.low}–$${band.high}</span><span>$${hist.edges[hist.edges.length - 1].toFixed(0)}</span></div>`;
+        html += `<div class="mc-band-labels"><span>${cur()}${hist.edges[0].toFixed(0)}</span><span style="color:var(--gold-light)">1σ band ${cur()}${band.low}–${cur()}${band.high}</span><span>${cur()}${hist.edges[hist.edges.length - 1].toFixed(0)}</span></div>`;
     }
 
     // Target probabilities
@@ -1301,9 +1327,9 @@ function renderMonteCarlo() {
         mc.target_probabilities.forEach(t => {
             html += `<tr>
                 <td>±${t.move_pct}%</td>
-                <td class="text-green">$${t.up_level.toFixed(0)}</td>
+                <td class="text-green">${cur()}${t.up_level.toFixed(0)}</td>
                 <td>${t.prob_up_close}%</td>
-                <td class="text-red">$${t.dn_level.toFixed(0)}</td>
+                <td class="text-red">${cur()}${t.dn_level.toFixed(0)}</td>
                 <td>${t.prob_dn_close}%</td>
             </tr>`;
         });
@@ -1316,6 +1342,21 @@ function renderMonteCarlo() {
 // ═══════════════════════════════════════
 // WORLD INDICES (global macro context)
 // ═══════════════════════════════════════
+// Inline SVG sparkline from a list of values. Colour comes from the parent
+// .index-cell .up/.down class (CSS vars don't resolve in SVG attributes).
+function sparkSvg(vals) {
+    if (!vals || vals.length < 2) return '<div class="spark-empty"></div>';
+    const w = 100, h = 30, pad = 3;
+    const min = Math.min(...vals), max = Math.max(...vals), rng = (max - min) || 1;
+    const xy = (v, i) => `${((i / (vals.length - 1)) * w).toFixed(1)},${(pad + (h - 2 * pad) - ((v - min) / rng) * (h - 2 * pad)).toFixed(1)}`;
+    const line = vals.map(xy).join(' ');
+    const area = `0,${h} ${line} ${w},${h}`;
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        <polygon class="spark-fill" points="${area}"/>
+        <polyline class="spark-line" points="${line}"/>
+    </svg>`;
+}
+
 function renderWorldIndices() {
     const el = document.getElementById('world-indices');
     if (!el) return;
@@ -1326,19 +1367,21 @@ function renderWorldIndices() {
     }
     el.innerHTML = idx.map(i => {
         const c = i.change_pct;
-        const color = c == null ? 'var(--text-muted)'
-            : c > 0.05 ? 'var(--green)' : c < -0.05 ? 'var(--red)' : 'var(--amber)';
+        const dir = c == null ? 'flat' : c > 0.001 ? 'up' : c < -0.001 ? 'down' : 'flat';
         const arrow = c == null ? '' : c > 0 ? '▲' : c < 0 ? '▼' : '–';
         const priceStr = i.price != null ? Number(i.price).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--';
         const chgStr = c != null ? `${c >= 0 ? '+' : ''}${c.toFixed(2)}%` : '--';
         return `
-            <div class="index-cell">
+            <div class="index-cell ${dir}">
                 <div class="index-head">
                     <span class="index-name" title="${i.name} (${i.symbol})">${i.name}</span>
                     <span class="index-region">${i.region}</span>
                 </div>
-                <div class="index-price">${priceStr}</div>
-                <div class="index-chg" style="color:${color}">${arrow} ${chgStr}</div>
+                <div class="index-spark">${sparkSvg(i.spark)}</div>
+                <div class="index-foot">
+                    <span class="index-price">${priceStr}</span>
+                    <span class="index-chg">${arrow} ${chgStr}</span>
+                </div>
             </div>`;
     }).join('');
 }
@@ -1361,12 +1404,12 @@ function renderConfluence() {
         return `
             <div class="zone-item ${z.side}">
                 <div class="zone-head">
-                    <span class="zone-price">$${z.center.toFixed(2)}</span>
+                    <span class="zone-price">${cur()}${z.center.toFixed(2)}</span>
                     <span class="zone-strength" title="${z.strength} overlapping levels">${dots}</span>
                 </div>
                 <div class="zone-head">
                     <span class="zone-dist" style="color:${distColor}">${z.dist_pct >= 0 ? '+' : ''}${z.dist_pct}% · ${z.side}</span>
-                    <span class="zone-dist">$${z.low.toFixed(0)}–$${z.high.toFixed(0)}</span>
+                    <span class="zone-dist">${cur()}${z.low.toFixed(0)}–${cur()}${z.high.toFixed(0)}</span>
                 </div>
                 <div class="zone-sources">${z.sources.join(' · ')}</div>
             </div>
@@ -1399,7 +1442,7 @@ function renderStructure() {
         html += `
             <div style="padding:8px 10px; background:${bg}; border-radius:var(--radius-xs); border-left:3px solid ${c}; margin-bottom:10px;">
                 <div style="font-size:0.75rem; font-weight:600; color:${c};">${sw.label}</div>
-                <div style="font-size:0.62rem; color:var(--text-muted); margin-top:2px;">Swing range $${sw.recent_low?.toFixed(0)}–$${sw.recent_high?.toFixed(0)} · price at ${sw.range_position_pct}% of range</div>
+                <div style="font-size:0.62rem; color:var(--text-muted); margin-top:2px;">Swing range ${cur()}${sw.recent_low?.toFixed(0)}–${cur()}${sw.recent_high?.toFixed(0)} · price at ${sw.range_position_pct}% of range</div>
                 <div style="margin-top:5px; height:6px; background:var(--bg-elevated); border-radius:3px; overflow:hidden;">
                     <div style="height:100%; width:${sw.range_position_pct}%; background:${c};"></div>
                 </div>
@@ -1416,7 +1459,7 @@ function renderStructure() {
     const vwap = s.vwap || {};
     if (vwap.vwap != null) {
         const c = vwap.position.includes('Above') ? 'var(--green)' : 'var(--red)';
-        html += `<div class="metric-row"><span class="k">VWAP (intraday)</span><span class="v">$${vwap.vwap.toFixed(2)} <span style="color:${c}; font-size:0.62rem;">(${vwap.dist_pct >= 0 ? '+' : ''}${vwap.dist_pct}%)</span></span></div>`;
+        html += `<div class="metric-row"><span class="k">VWAP (intraday)</span><span class="v">${cur()}${vwap.vwap.toFixed(2)} <span style="color:${c}; font-size:0.62rem;">(${vwap.dist_pct >= 0 ? '+' : ''}${vwap.dist_pct}%)</span></span></div>`;
     }
 
     const gsr = s.gold_silver_ratio || {};
@@ -1583,12 +1626,13 @@ function renderEquityCurve(curve) {
     container.innerHTML = '';
     if (!curve.length || typeof LightweightCharts === 'undefined') return;
 
+    const etc = themeColors();
     const c = LightweightCharts.createChart(container, {
         width: container.clientWidth, height: 160,
-        layout: { background: { type: 'solid', color: '#0C0C0E' }, textColor: '#8B8B8E', fontSize: 10 },
-        grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
-        timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: false },
-        rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
+        layout: { background: { type: 'solid', color: etc.bg }, textColor: etc.text, fontSize: 10 },
+        grid: { vertLines: { color: etc.grid }, horzLines: { color: etc.grid } },
+        timeScale: { borderColor: etc.border, timeVisible: false },
+        rightPriceScale: { borderColor: etc.border },
         handleScroll: false, handleScale: false,
     });
     const strat = c.addLineSeries({ color: '#4CC2FF', lineWidth: 2, title: 'Strategy' });
@@ -1633,7 +1677,9 @@ function renderScenarios() {
     const fxEl = document.getElementById('gold-in-fx');
     const scenEl = document.getElementById('macro-scenarios');
 
-    const fx = sc.gold_in_fx || [];
+    // FX conversion assumes a USD-quoted price — skip for non-USD assets (₹ stocks).
+    const fx = (cur() === '$') ? (sc.gold_in_fx || []) : [];
+    fxEl.innerHTML = '';
     if (fx.length) {
         fxEl.innerHTML = `<div style="font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:5px;">${metal()} Priced In</div>
             <div class="fx-grid">${fx.map(f => `
@@ -1670,6 +1716,8 @@ function setupToolbar() {
 
     if (refreshBtn) refreshBtn.onclick = () => loadData();
     if (printBtn) printBtn.onclick = () => window.print();
+    const themeBtn = document.getElementById('theme-btn');
+    if (themeBtn) themeBtn.onclick = toggleTheme;
     if (autoToggle) {
         autoToggle.onchange = () => {
             if (autoToggle.checked) {
@@ -1693,4 +1741,4 @@ function getSignalColor(signal) {
 }
 
 // ── Initialize ──
-document.addEventListener('DOMContentLoaded', loadData);
+document.addEventListener('DOMContentLoaded', () => { initTheme(); loadData(); });
